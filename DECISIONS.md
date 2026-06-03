@@ -193,3 +193,99 @@ In rough order of impact:
 7. **Evaluate, don't guess.** Tune against the golden eval set (`eval/`, per
    SOURCES.md). Change one parameter, re-run `rag-ingest --force`, re-measure
    retrieval recall@k. The pipeline is idempotent precisely so this loop is cheap.
+
+---
+
+# Retrieval decisions
+
+The retrieval layer (`src/agentic_rag/retrieve/`) sits on top of the index. The
+funnel:
+
+```
+              dense (bge cosine, Qdrant) top-50 ┐
+                                                ├─ RRF fuse ─→ top-30 ─→ cross-encoder rerank ─→ top-k
+              BM25 (in-memory) top-50           ┘
+```
+
+Public interface: `HybridRetriever.retrieve(query, k) -> list[RetrievedChunk]`,
+where each `RetrievedChunk` carries the full source metadata (title, arxiv_id,
+section, page/page_end) plus scores. Build once with `build_retriever()`; query
+many times. CLI: `python scripts/search.py "<query>"`.
+
+## 8. Dense + BM25, and why **both**
+
+- **Dense** (our bge embeddings) matches on *meaning* — great for paraphrase and
+  concept queries ("how is attention made cheaper?" finds "efficient
+  self-attention" even with no shared words).
+- **BM25** matches on *exact terms*, weighted by rarity — great for the things
+  embeddings blur: model names (RoBERTa vs BERT), datasets (GLUE, SQuAD),
+  metrics (BLEU), symbols, acronyms.
+
+They fail in opposite directions, so combining them covers both query types.
+
+**BM25 runs in-memory** (`rank_bm25` over the chunk texts loaded from Qdrant),
+not as Qdrant sparse vectors. Rationale: the corpus is ~1,150 chunks, so
+in-process BM25 is instant; it keeps the existing dense index untouched (no
+re-ingest), and the logic is pure and unit-testable offline. **Tradeoff:** it
+rebuilds the BM25 index in memory at `build_retriever()` time (sub-second here)
+and won't scale to millions of chunks. The clean upgrade at scale is Qdrant's
+native sparse vectors + server-side Query-API fusion — same `retrieve()`
+interface, swap the implementation behind it.
+
+## 9. Fusion: **Reciprocal Rank Fusion (RRF)**
+
+`rrf_score(d) = Σ 1 / (k + rank_r(d))` over each retriever r; default k=60.
+
+Chosen over score-based fusion (e.g. weighted sum of normalized scores) because
+dense cosine (~0–1) and BM25 (unbounded, corpus-dependent) live on
+incomparable scales — normalizing them is brittle and needs per-corpus tuning.
+RRF ignores raw scores and fuses on **rank position**, so it's parameter-light,
+robust, and a strong default. A chunk ranked well by *both* retrievers
+accumulates from both lists and rises — exactly the hybrid behavior we want.
+
+## 10. Reranking: cross-encoder, and the latency/quality tradeoff
+
+- Dense and BM25 are **bi-encoders / bag-of-words**: query and passage are scored
+  independently, so retrieval is cheap but the relevance judgment is coarse.
+- A **cross-encoder** (`cross-encoder/ms-marco-MiniLM-L-6-v2`, free/local/~80MB)
+  feeds *(query, passage) together* through a transformer, so it judges true
+  relevance far more accurately.
+
+**The tradeoff:** a cross-encoder cannot precompute anything — it runs one model
+inference *per candidate*. Scoring all 1,150 chunks per query would be slow. So
+reranking is the **last, narrow stage**: fetch broadly and cheaply (dense+BM25),
+fuse, then rerank only the **top ~30** fused candidates. This is the standard
+"retrieve-then-rerank" pattern — near-cross-encoder quality at near-bi-encoder
+latency. On CPU, reranking 30 short passages adds roughly a few hundred ms;
+`rerank_candidates` and `use_reranker` trade that latency against quality. (For
+higher quality at more cost: `BAAI/bge-reranker-base`.)
+
+## 11. Worked example — where dense alone fails and hybrid wins
+
+Query: **"BLEU score for machine translation"** (BLEU = an exact metric token).
+
+- **Dense-only top-5** anchored on the *concept* "translation evaluation": it put
+  the Transformer's **Abstract** — which literally states the new SOTA *BLEU*
+  result — all the way down at **rank #14** (off the list), and instead filled
+  slots with GPT-3's raw numeric BLEU *tables* (walls of digits, useless as an
+  answer) and an off-topic T5 "inter-run variance" chunk.
+- **BM25** ranked that Transformer Abstract chunk **#1** — because it contains the
+  literal token *BLEU* — and also surfaced Transformer §5.4 ("Table 2: …better
+  BLEU scores than previous state-of-the-art", which dense had at #10).
+- **RRF + rerank** merged the two: the actual result-bearing chunks rose into the
+  top-3, displacing the number-dumps.
+
+The general lesson: for queries that hinge on a precise term, dense embeddings
+treat the term as generic topic signal and can bury the exact-match chunk; BM25
+anchors on the literal token, and fusion+rerank gets the best of both.
+
+## 12. Tuning the retrieval layer
+
+- **Recall too low (right chunk never retrieved):** raise `dense_candidates` /
+  `bm25_candidates` (50 → 100) so fusion sees a wider net.
+- **Exact-term queries underperform:** the BM25 half is the lever — verify
+  tokenization keeps your terms intact.
+- **Top result often *almost* right:** raise `rerank_candidates` (30 → 50) so the
+  reranker can reach deeper, or upgrade the reranker model.
+- **Too slow:** lower `rerank_candidates`, or set `use_reranker=False` to fall
+  back to fusion-only (faster, lower quality — compare with `search.py --compare`).

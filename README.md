@@ -31,7 +31,35 @@ rag-ingest                       # or: python -m agentic_rag.ingest.cli
 
 # inspect the index + run a sample query
 python scripts/inspect_index.py --query "how does RoBERTa differ from BERT?"
+
+# 4. hybrid retrieval (dense + BM25 + rerank)
+python scripts/search.py "BLEU score for machine translation" --k 5 --compare
 ```
+
+## Retrieval
+
+Hybrid retrieval combines dense vector search (bge embeddings in Qdrant) with
+in-memory BM25 keyword search, fuses them with **Reciprocal Rank Fusion**, and
+reranks the top candidates with a local cross-encoder. Full rationale + a worked
+"where dense fails" example in [`DECISIONS.md`](DECISIONS.md).
+
+```python
+from agentic_rag.retrieve import build_retriever
+
+retriever = build_retriever()                 # build once (loads models + index)
+hits = retriever.retrieve("GLUE benchmark", k=5)
+for h in hits:
+    print(h.score, h.citation(), h.text[:80])  # metadata intact for citation
+```
+
+CLI:
+
+| Command | Effect |
+|---|---|
+| `python scripts/search.py "<query>"` | ranked results with scores + sources |
+| `... --k 8` | return 8 results |
+| `... --no-rerank` | fusion only (skip the cross-encoder) |
+| `... --compare` | show dense-only vs hybrid side by side |
 
 ### CLI
 
@@ -69,8 +97,17 @@ src/agentic_rag/ingest/
   index.py      # idempotent Qdrant upsert
   pipeline.py   # orchestration
   cli.py        # rag-ingest entry point
+src/agentic_rag/retrieve/
+  config.py     # retrieval tunables (candidates, RRF k, reranker)
+  models.py     # RetrievedChunk (result + scores + metadata)
+  dense.py      # Qdrant dense search + chunk loader
+  bm25.py       # in-memory BM25 keyword search
+  fusion.py     # Reciprocal Rank Fusion
+  rerank.py     # cross-encoder reranker
+  retriever.py  # HybridRetriever.retrieve(query, k); build_retriever()
 scripts/
   fetch_corpus.py    # reproducible corpus download
-  inspect_index.py   # index stats + sample query (retrieval smoke test)
-tests/               # offline unit tests
+  inspect_index.py   # index stats + sample query
+  search.py          # hybrid retrieval from the CLI
+tests/               # offline unit tests (chunking, metadata, fusion, bm25, retriever)
 ```

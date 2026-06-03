@@ -3,5 +3,6 @@
 pymupdf>=1.24,<2.0          # layout-aware PDF parsing (the chosen parser — see DECISIONS.md)
 sentence-transformers>=3.0  # local, free embeddings (pulls torch + transformers)
 qdrant-client>=1.9          # vector index client (talks to the Dockerized Qdrant)
+rank-bm25>=0.2.2            # in-memory BM25 keyword search (hybrid retrieval)
 tqdm>=4.66                  # progress bars
 pytest>=8.0                 # tests (chunking + metadata logic)
