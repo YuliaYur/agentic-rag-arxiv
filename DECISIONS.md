@@ -2,8 +2,7 @@
 
 Architecture Decision Records (ADRs) for `agentic-rag-arxiv`. Each entry is dated
 and follows **Status · Context · Decision · Consequences**. Newest decisions
-extend, and may supersede, older ones. Project overview and current status live
-in [`CLAUDE.md`](CLAUDE.md).
+extend, and may supersede, older ones.
 
 | ADR | Title | Status |
 |---|---|---|
@@ -40,13 +39,11 @@ agent graph, eval suite, and services land — not a single notebook.
 - **Tests offline by design:** pure logic is unit-tested with no network or model
   downloads; heavy components are injected and faked. Network/model paths are
   exercised by scripts, not the test suite.
-- **`DECISIONS.md` is this ADR log;** `CLAUDE.md` is the living status/convention
-  doc.
+- **`DECISIONS.md` is this ADR log** for the project's design decisions.
 
 **Consequences.** Contributors get one-command setup (`uv sync`), consistent
 formatting enforced automatically, and a fast, deterministic test suite. Slight
 overhead: the `src/` layout requires an editable install to import the package.
-Commits in this repo are authored by YuliaYur only (no co-author trailer).
 
 ---
 

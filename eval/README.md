@@ -39,4 +39,4 @@ in CI.
 ## Current status
 
 Seed golden set only. Metric runners + CI gating come with the agent/answer
-layer. See [`../CLAUDE.md`](../CLAUDE.md) for overall status.
+layer. See the project [`README`](../README.md) for overall status.

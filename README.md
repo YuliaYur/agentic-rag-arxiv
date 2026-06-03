@@ -87,10 +87,9 @@ pytest                       # offline unit tests (no network, no model download
 ruff check . && ruff format --check .   # lint + format (also run by pre-commit)
 ```
 
-Project conventions, constraints, and live build status are in
-[`CLAUDE.md`](CLAUDE.md); design decisions in [`DECISIONS.md`](DECISIONS.md); the
-evaluation golden set in [`eval/`](eval/). Copy [`.env.example`](.env.example) to
-`.env` for API keys / service config.
+Design decisions are recorded in [`DECISIONS.md`](DECISIONS.md); the evaluation
+golden set lives in [`eval/`](eval/). Service config and API keys go in a local
+`.env` (git-ignored).
 
 ## Layout
 
