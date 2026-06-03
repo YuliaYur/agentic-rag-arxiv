@@ -10,8 +10,15 @@ from agentic_rag.retrieve.retriever import HybridRetriever
 
 def _chunk(i: str, text: str) -> RetrievedChunk:
     return RetrievedChunk(
-        id=i, text=text, arxiv_id=f"id-{i}", title=f"Title {i}", slug=i,
-        section=f"Section {i}", page=1, page_end=1, chunk_index=int(i[-1]),
+        id=i,
+        text=text,
+        arxiv_id=f"id-{i}",
+        title=f"Title {i}",
+        slug=i,
+        section=f"Section {i}",
+        page=1,
+        page_end=1,
+        chunk_index=int(i[-1]),
     )
 
 
@@ -63,8 +70,13 @@ def test_metadata_intact_in_results():
 def test_fusion_promotes_doc_strong_in_both():
     # Dense favors d1; BM25 (via the query "glue benchmark") favors d2.
     # d2 is rank-1 in BM25 and present in dense -> should win the fusion.
-    r = HybridRetriever(CHUNKS, FakeDense(["d2", "d1", "d3"]), _bm25(),
-                        reranker=None, config=RetrieveConfig(use_reranker=False))
+    r = HybridRetriever(
+        CHUNKS,
+        FakeDense(["d2", "d1", "d3"]),
+        _bm25(),
+        reranker=None,
+        config=RetrieveConfig(use_reranker=False),
+    )
     hits = r.retrieve("glue benchmark", k=4)
     assert hits[0].id == "d2"
     # Provenance is recorded.
@@ -78,8 +90,9 @@ def test_reranker_reorders_results():
     scores[CHUNKS[2].text] = 9.9  # d3 gets the top rerank score
     rr = FakeReranker(scores)
     cfg = RetrieveConfig(use_reranker=True, rerank_candidates=10)
-    r = HybridRetriever(CHUNKS, FakeDense(["d1", "d2", "d3", "d4"]), _bm25(),
-                        reranker=rr, config=cfg)
+    r = HybridRetriever(
+        CHUNKS, FakeDense(["d1", "d2", "d3", "d4"]), _bm25(), reranker=rr, config=cfg
+    )
     hits = r.retrieve("transformer", k=4)
     assert hits[0].id == "d3"
     assert hits[0].rerank_score == 9.9

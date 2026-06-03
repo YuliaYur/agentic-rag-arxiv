@@ -17,8 +17,9 @@ data/raw/*.pdf  →  parse (PyMuPDF)  →  chunk (section-aware)  →  embed (bg
 ## Quickstart
 
 ```bash
-# 0. (once) create + activate a venv, then install
-pip install -e ".[dev]"          # or: pip install -r requirements.txt
+# 0. (once) install deps + enable hooks
+uv sync                          # or fallback: pip install -e ".[dev]"
+pre-commit install               # ruff lint+format on commit
 
 # 1. fetch the corpus into data/raw/ (skips files already present)
 python scripts/fetch_corpus.py
@@ -79,11 +80,17 @@ Re-runs are **idempotent**: deterministic point ids mean re-running never
 duplicates, and a stale-tail prune keeps the index consistent if chunking
 parameters change.
 
-## Tests
+## Tests & quality
 
 ```bash
-pytest            # chunking + metadata + corpus/parse logic (no network, no model)
+pytest                       # offline unit tests (no network, no model downloads)
+ruff check . && ruff format --check .   # lint + format (also run by pre-commit)
 ```
+
+Project conventions, constraints, and live build status are in
+[`CLAUDE.md`](CLAUDE.md); design decisions in [`DECISIONS.md`](DECISIONS.md); the
+evaluation golden set in [`eval/`](eval/). Copy [`.env.example`](.env.example) to
+`.env` for API keys / service config.
 
 ## Layout
 

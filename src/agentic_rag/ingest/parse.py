@@ -27,9 +27,21 @@ import fitz  # PyMuPDF
 _NUMBERED_HEADING_RE = re.compile(r"^\s*(\d+|[A-Z])(\.\d+)*\.?\s+[A-Z][\w&/-]")
 # Unnumbered headings common in arXiv papers.
 _UNNUMBERED_HEADINGS = {
-    "abstract", "introduction", "related work", "background", "conclusion",
-    "conclusions", "references", "acknowledgments", "acknowledgements",
-    "appendix", "discussion", "methods", "method", "experiments", "results",
+    "abstract",
+    "introduction",
+    "related work",
+    "background",
+    "conclusion",
+    "conclusions",
+    "references",
+    "acknowledgments",
+    "acknowledgements",
+    "appendix",
+    "discussion",
+    "methods",
+    "method",
+    "experiments",
+    "results",
 }
 # Heading detection: a heading line is short.
 _MAX_HEADING_WORDS = 12
@@ -43,8 +55,8 @@ class Block:
     """One reading-ordered text block from the PDF."""
 
     text: str
-    page: int          # 1-based page number
-    section: str       # section title this block belongs to
+    page: int  # 1-based page number
+    section: str  # section title this block belongs to
     is_heading: bool
 
 
@@ -107,8 +119,9 @@ def is_heading(text: str, font_size: float, body_size: float) -> bool:
     return heading_kind(text, font_size, body_size) is not None
 
 
-def order_blocks(blocks: list[tuple[tuple[float, float, float, float], str, float]],
-                 page_width: float) -> list[tuple[str, float]]:
+def order_blocks(
+    blocks: list[tuple[tuple[float, float, float, float], str, float]], page_width: float
+) -> list[tuple[str, float]]:
     """Reconstruct reading order for a (possibly two-column) page.
 
     ``blocks`` is a list of (bbox, text, font_size); bbox is (x0, y0, x1, y1).
@@ -129,8 +142,10 @@ def order_blocks(blocks: list[tuple[tuple[float, float, float, float], str, floa
         if not buffer:
             return
         left = sorted((b for b in buffer if (b[0][0] + b[0][2]) / 2 < mid_x), key=lambda b: b[0][1])
-        right = sorted((b for b in buffer if (b[0][0] + b[0][2]) / 2 >= mid_x), key=lambda b: b[0][1])
-        for bbox, text, size in (*left, *right):
+        right = sorted(
+            (b for b in buffer if (b[0][0] + b[0][2]) / 2 >= mid_x), key=lambda b: b[0][1]
+        )
+        for _bbox, text, size in (*left, *right):
             ordered.append((text, size))
         buffer.clear()
 
@@ -182,8 +197,14 @@ def parse_pdf(path, *, drop_references: bool = True) -> list[Block]:
                         current_section = REFERENCES
                 if drop_references and hit_references:
                     continue
-                out.append(Block(text=text, page=page_index, section=current_section,
-                                 is_heading=is_section_heading))
+                out.append(
+                    Block(
+                        text=text,
+                        page=page_index,
+                        section=current_section,
+                        is_heading=is_section_heading,
+                    )
+                )
         return out
     finally:
         doc.close()

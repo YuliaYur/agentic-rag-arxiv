@@ -17,8 +17,14 @@ from .models import RetrievedChunk
 
 
 class HybridRetriever:
-    def __init__(self, chunks, dense_searcher, bm25_index, reranker=None,
-                 config: RetrieveConfig | None = None) -> None:
+    def __init__(
+        self,
+        chunks,
+        dense_searcher,
+        bm25_index,
+        reranker=None,
+        config: RetrieveConfig | None = None,
+    ) -> None:
         self._by_id = {c.id: c for c in chunks}
         self._dense = dense_searcher
         self._bm25 = bm25_index
@@ -30,8 +36,8 @@ class HybridRetriever:
         cfg = self._cfg
         k = k or cfg.final_k
 
-        dense = self._dense.search(query, cfg.dense_candidates)   # [(id, cos)]
-        bm25 = self._bm25.search(query, cfg.bm25_candidates)      # [(id, bm25)]
+        dense = self._dense.search(query, cfg.dense_candidates)  # [(id, cos)]
+        bm25 = self._bm25.search(query, cfg.bm25_candidates)  # [(id, bm25)]
         dense_ids = [doc_id for doc_id, _ in dense]
         bm25_ids = [doc_id for doc_id, _ in bm25]
 
@@ -46,19 +52,21 @@ class HybridRetriever:
             base = self._by_id.get(doc_id)
             if base is None:
                 continue
-            candidates.append(dataclasses.replace(
-                base,
-                score=rrf_score,
-                dense_rank=dense_rank.get(doc_id),
-                bm25_rank=bm25_rank.get(doc_id),
-            ))
+            candidates.append(
+                dataclasses.replace(
+                    base,
+                    score=rrf_score,
+                    dense_rank=dense_rank.get(doc_id),
+                    bm25_rank=bm25_rank.get(doc_id),
+                )
+            )
 
         # Rerank the top fused candidates with the cross-encoder (the costly step).
         if self._reranker is not None and cfg.use_reranker and candidates:
             head = candidates[: cfg.rerank_candidates]
             tail = candidates[cfg.rerank_candidates :]
             scores = self._reranker.score(query, [c.text for c in head])
-            for c, s in zip(head, scores):
+            for c, s in zip(head, scores, strict=True):
                 c.rerank_score = s
             head.sort(key=lambda c: c.rerank_score, reverse=True)
             candidates = head + tail

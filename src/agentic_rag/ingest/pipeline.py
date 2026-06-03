@@ -71,6 +71,7 @@ def run_ingest(
 
     try:
         from tqdm import tqdm
+
         iterator = tqdm(corpus, desc="Ingesting", unit="paper")
     except Exception:  # tqdm optional
         iterator = corpus

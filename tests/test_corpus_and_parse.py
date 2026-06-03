@@ -12,14 +12,18 @@ import json
 from agentic_rag.ingest.corpus import clean_title, load_corpus, parse_titles
 from agentic_rag.ingest.parse import is_heading, order_blocks
 
-
 # --------------------------- corpus / titles ---------------------------------
 
+
 def test_clean_title_strips_author_and_alias():
-    assert clean_title("Attention Is All You Need (Transformer) — Vaswani et al.") == \
-        "Attention Is All You Need"
-    assert clean_title("BERT: Pre-training of Deep Bidirectional Transformers — Devlin et al.") == \
-        "BERT: Pre-training of Deep Bidirectional Transformers"
+    assert (
+        clean_title("Attention Is All You Need (Transformer) — Vaswani et al.")
+        == "Attention Is All You Need"
+    )
+    assert (
+        clean_title("BERT: Pre-training of Deep Bidirectional Transformers — Devlin et al.")
+        == "BERT: Pre-training of Deep Bidirectional Transformers"
+    )
     assert clean_title("RoBERTa - Liu et al.") == "RoBERTa"
 
 
@@ -38,10 +42,20 @@ def test_parse_titles_from_sources_table():
 
 
 def test_load_corpus_merges_manifest_and_titles(tmp_path):
-    manifest = [{"arxiv_id": "1706.03762", "slug": "transformer", "file": "transformer.pdf",
-                 "status": "downloaded"},
-                {"arxiv_id": "9999.99999", "slug": "no_title_paper", "file": "x.pdf",
-                 "status": "downloaded"}]
+    manifest = [
+        {
+            "arxiv_id": "1706.03762",
+            "slug": "transformer",
+            "file": "transformer.pdf",
+            "status": "downloaded",
+        },
+        {
+            "arxiv_id": "9999.99999",
+            "slug": "no_title_paper",
+            "file": "x.pdf",
+            "status": "downloaded",
+        },
+    ]
     mpath = tmp_path / "manifest.json"
     mpath.write_text(json.dumps(manifest), encoding="utf-8")
     spath = tmp_path / "SOURCES.md"
@@ -58,6 +72,7 @@ def test_load_corpus_merges_manifest_and_titles(tmp_path):
 
 
 # --------------------------- heading detection --------------------------------
+
 
 def test_is_heading_numbered():
     assert is_heading("3 Pre-training", font_size=10, body_size=10)
@@ -82,12 +97,13 @@ def test_not_heading_for_body_text():
 
 # --------------------------- two-column reading order -------------------------
 
+
 def test_order_blocks_two_column_with_full_width_header():
     pw = 600.0  # page width; mid = 300
     # (bbox=(x0,y0,x1,y1), text, font_size)
     blocks = [
-        ((10, 0, 590, 30), "TITLE", 16),        # full-width header (top)
-        ((40, 100, 280, 140), "left-top", 10),   # left column
+        ((10, 0, 590, 30), "TITLE", 16),  # full-width header (top)
+        ((40, 100, 280, 140), "left-top", 10),  # left column
         ((40, 200, 280, 240), "left-bottom", 10),
         ((320, 100, 560, 140), "right-top", 10),  # right column
         ((320, 200, 560, 240), "right-bottom", 10),
@@ -107,7 +123,9 @@ def test_order_blocks_full_width_separates_bands():
     ]
     ordered = [t for t, _ in order_blocks(blocks, pw)]
     assert ordered == [
-        "band1-left", "band1-right",
+        "band1-left",
+        "band1-right",
         "FULL-WIDTH-FIGURE",
-        "band2-left", "band2-right",
+        "band2-left",
+        "band2-right",
     ]

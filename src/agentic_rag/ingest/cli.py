@@ -12,6 +12,7 @@ Also runnable without install as: python -m agentic_rag.ingest.cli
 from __future__ import annotations
 
 import argparse
+import contextlib
 import dataclasses
 import sys
 import textwrap
@@ -25,10 +26,8 @@ def _force_utf8_stdout() -> None:
     contains math symbols and other non-Latin characters. Force UTF-8 so
     printing never crashes."""
     for stream in (sys.stdout, sys.stderr):
-        try:
+        with contextlib.suppress(Exception):
             stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
 
 
 def _build_config(args: argparse.Namespace) -> IngestConfig:
@@ -67,22 +66,32 @@ def main(argv: list[str] | None = None) -> int:
         description="Ingest arXiv PDFs into a local Qdrant vector index.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--papers", nargs="+", metavar="ID_OR_SLUG",
-                   help="limit to these papers (arxiv_id or slug)")
+    p.add_argument(
+        "--papers", nargs="+", metavar="ID_OR_SLUG", help="limit to these papers (arxiv_id or slug)"
+    )
     p.add_argument("--limit", type=int, default=None, help="process at most N papers")
     p.add_argument("--force", action="store_true", help="re-embed + re-index even if up-to-date")
     p.add_argument("--recreate", action="store_true", help="drop and rebuild the collection first")
-    p.add_argument("--dry-run", action="store_true",
-                   help="parse + chunk only; no model, no Qdrant (offline)")
+    p.add_argument(
+        "--dry-run", action="store_true", help="parse + chunk only; no model, no Qdrant (offline)"
+    )
     p.add_argument("--examples", type=int, default=3, help="how many example chunks to print")
     p.add_argument("--model", default=base.embed.model_name, help="sentence-transformers model")
     p.add_argument("--collection", default=base.qdrant.collection, help="Qdrant collection name")
     p.add_argument("--host", default=base.qdrant.host, help="Qdrant host")
     p.add_argument("--port", type=int, default=base.qdrant.port, help="Qdrant port")
-    p.add_argument("--target-tokens", type=int, default=base.chunk.target_tokens,
-                   help="target chunk size in tokens")
-    p.add_argument("--overlap-tokens", type=int, default=base.chunk.overlap_tokens,
-                   help="overlap between chunks in tokens")
+    p.add_argument(
+        "--target-tokens",
+        type=int,
+        default=base.chunk.target_tokens,
+        help="target chunk size in tokens",
+    )
+    p.add_argument(
+        "--overlap-tokens",
+        type=int,
+        default=base.chunk.overlap_tokens,
+        help="overlap between chunks in tokens",
+    )
     args = p.parse_args(argv)
     _force_utf8_stdout()
 
@@ -98,8 +107,10 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     print("\n" + "-" * 78)
-    print(f"Papers processed: {result.papers_processed}  "
-          f"skipped(up-to-date): {result.papers_skipped}  missing: {result.papers_missing}")
+    print(
+        f"Papers processed: {result.papers_processed}  "
+        f"skipped(up-to-date): {result.papers_skipped}  missing: {result.papers_missing}"
+    )
     print(f"Total chunks: {result.total_chunks}  newly indexed: {result.indexed_chunks}")
     _print_examples(result.examples)
     return 0

@@ -6,7 +6,13 @@ from agentic_rag.retrieve.bm25 import BM25Index, tokenize
 
 
 def test_tokenize_keeps_alnum_terms_lowercased():
-    assert tokenize("RoBERTa uses the GLUE benchmark.") == ["roberta", "uses", "the", "glue", "benchmark"]
+    assert tokenize("RoBERTa uses the GLUE benchmark.") == [
+        "roberta",
+        "uses",
+        "the",
+        "glue",
+        "benchmark",
+    ]
     assert tokenize("O(n^2)") == ["o", "n", "2"]
 
 

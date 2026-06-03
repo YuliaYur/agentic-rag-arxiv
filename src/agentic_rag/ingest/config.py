@@ -23,20 +23,22 @@ class ChunkConfig:
     behind these defaults and how to tune them.
     """
 
-    target_tokens: int = 384      # aim per chunk; comfortably under the 512-token model window
-    overlap_tokens: int = 64      # ~17% carry-over so facts split across a boundary stay retrievable
-    min_tokens: int = 48          # merge/drop fragments smaller than this
-    max_tokens: int = 480         # hard ceiling; oversize units are split to respect the model window
+    target_tokens: int = 384  # aim per chunk; comfortably under the 512-token model window
+    overlap_tokens: int = 64  # ~17% carry-over so facts split across a boundary stay retrievable
+    min_tokens: int = 48  # merge/drop fragments smaller than this
+    max_tokens: int = 480  # hard ceiling; oversize units are split to respect the model window
     respect_sections: bool = True  # never let a chunk span two sections
-    drop_references: bool = True   # skip the bibliography (low-value, noisy for QA)
-    prepend_context: bool = True   # embed "<title> > <section>\n<text>" for better retrieval
+    drop_references: bool = True  # skip the bibliography (low-value, noisy for QA)
+    prepend_context: bool = True  # embed "<title> > <section>\n<text>" for better retrieval
 
 
 @dataclass(frozen=True)
 class EmbedConfig:
     """Local sentence-transformers embedding settings."""
 
-    model_name: str = "BAAI/bge-small-en-v1.5"  # 384-dim, 512-token ctx, strong MTEB retrieval, CPU-friendly
+    model_name: str = (
+        "BAAI/bge-small-en-v1.5"  # 384-dim, 512-token ctx, strong MTEB retrieval, CPU-friendly
+    )
     dim: int = 384
     batch_size: int = 64
     normalize: bool = True  # unit vectors -> cosine == dot product

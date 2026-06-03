@@ -17,13 +17,25 @@ def _sentence(word: str, n: int) -> str:
 
 def _make_chunks(**kw):
     blocks = [
-        Block(text=" ".join(_sentence("alpha", 6) for _ in range(6)), page=1,
-              section="Introduction", is_heading=False),
-        Block(text=" ".join(_sentence("beta", 6) for _ in range(6)), page=2,
-              section="Introduction", is_heading=False),
+        Block(
+            text=" ".join(_sentence("alpha", 6) for _ in range(6)),
+            page=1,
+            section="Introduction",
+            is_heading=False,
+        ),
+        Block(
+            text=" ".join(_sentence("beta", 6) for _ in range(6)),
+            page=2,
+            section="Introduction",
+            is_heading=False,
+        ),
     ]
-    defaults = dict(arxiv_id="1706.03762", title="Attention Is All You Need",
-                    slug="transformer", config=CFG)
+    defaults = {
+        "arxiv_id": "1706.03762",
+        "title": "Attention Is All You Need",
+        "slug": "transformer",
+        "config": CFG,
+    }
     defaults.update(kw)
     return chunk_blocks(blocks, **defaults)
 
@@ -71,8 +83,18 @@ def test_point_id_is_deterministic_and_unique():
 def test_payload_has_all_citation_keys():
     c = _make_chunks()[0]
     payload = c.payload()
-    for key in ("text", "arxiv_id", "title", "slug", "section", "page",
-                "page_end", "chunk_index", "n_tokens", "content_hash"):
+    for key in (
+        "text",
+        "arxiv_id",
+        "title",
+        "slug",
+        "section",
+        "page",
+        "page_end",
+        "chunk_index",
+        "n_tokens",
+        "content_hash",
+    ):
         assert key in payload
     assert payload["text"] == c.text
 
@@ -85,6 +107,7 @@ def test_embed_text_includes_context_header_when_enabled():
 
 def test_embed_text_is_plain_when_context_disabled():
     import dataclasses
+
     cfg = dataclasses.replace(CFG, prepend_context=False)
     c = _make_chunks(config=cfg)[0]
     assert c.embed_text == c.text

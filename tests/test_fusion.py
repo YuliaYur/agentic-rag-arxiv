@@ -17,13 +17,13 @@ def test_doc_high_in_both_lists_wins():
 
 def test_rrf_score_formula():
     fused = dict(reciprocal_rank_fusion([["x", "y"]], k=60))
-    assert abs(fused["x"] - 1.0 / 61) < 1e-9   # rank 1 -> 1/(60+1)
-    assert abs(fused["y"] - 1.0 / 62) < 1e-9   # rank 2 -> 1/(60+2)
+    assert abs(fused["x"] - 1.0 / 61) < 1e-9  # rank 1 -> 1/(60+1)
+    assert abs(fused["y"] - 1.0 / 62) < 1e-9  # rank 2 -> 1/(60+2)
 
 
 def test_scores_sum_across_lists():
     fused = dict(reciprocal_rank_fusion([["x"], ["x"]], k=60))
-    assert abs(fused["x"] - 2.0 / 61) < 1e-9   # rank 1 in both lists
+    assert abs(fused["x"] - 2.0 / 61) < 1e-9  # rank 1 in both lists
 
 
 def test_deterministic_tie_break_by_id():

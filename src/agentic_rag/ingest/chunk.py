@@ -20,8 +20,8 @@ from __future__ import annotations
 import hashlib
 import re
 import uuid
-from dataclasses import dataclass, field
-from typing import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
 
 from .config import ChunkConfig
 from .parse import Block
@@ -61,15 +61,15 @@ def split_sentences(text: str) -> list[str]:
 class Chunk:
     """A retrievable chunk plus everything needed to cite and index it."""
 
-    text: str            # clean text shown to the user / returned by retrieval
-    embed_text: str      # what actually gets embedded (may include a context header)
+    text: str  # clean text shown to the user / returned by retrieval
+    embed_text: str  # what actually gets embedded (may include a context header)
     arxiv_id: str
     title: str
     slug: str
     section: str
-    page: int            # first page the chunk touches (1-based)
-    page_end: int        # last page the chunk touches
-    chunk_index: int     # position within the paper
+    page: int  # first page the chunk touches (1-based)
+    page_end: int  # last page the chunk touches
+    chunk_index: int  # position within the paper
     n_tokens: int
     content_hash: str
 
@@ -174,8 +174,9 @@ def _emit(units: list[_Unit], count: TokenCounter) -> tuple[str, int, int, int]:
     return text, min(pages), max(pages), count(text)
 
 
-def _pack_section(units: list[_Unit], cfg: ChunkConfig, count: TokenCounter
-                  ) -> list[tuple[str, int, int, int]]:
+def _pack_section(
+    units: list[_Unit], cfg: ChunkConfig, count: TokenCounter
+) -> list[tuple[str, int, int, int]]:
     """Greedily pack units into overlapping chunks within a single section."""
     raw: list[tuple[str, int, int, int]] = []
     cur: list[_Unit] = []

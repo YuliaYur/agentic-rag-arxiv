@@ -11,16 +11,15 @@ Needs the Qdrant index running (docker compose up -d) and built (rag-ingest).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 import textwrap
 
 
 def _utf8():
     for s in (sys.stdout, sys.stderr):
-        try:
+        with contextlib.suppress(Exception):
             s.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
 
 
 def _print_hits(title, hits, scored=True):
@@ -34,7 +33,11 @@ def _print_hits(title, hits, scored=True):
             head = f"{i}. {h.citation()}"
         print(head)
         snippet = " ".join(h.text.split())[:200]
-        print(textwrap.fill(snippet + "...", width=74, initial_indent="     ", subsequent_indent="     "))
+        print(
+            textwrap.fill(
+                snippet + "...", width=74, initial_indent="     ", subsequent_indent="     "
+            )
+        )
 
 
 def main(argv=None) -> int:
@@ -43,8 +46,11 @@ def main(argv=None) -> int:
     p.add_argument("query", help="the search query")
     p.add_argument("--k", type=int, default=5, help="number of results to return")
     p.add_argument("--no-rerank", action="store_true", help="skip the cross-encoder rerank")
-    p.add_argument("--compare", action="store_true",
-                   help="also show dense-only results, to contrast with hybrid")
+    p.add_argument(
+        "--compare",
+        action="store_true",
+        help="also show dense-only results, to contrast with hybrid",
+    )
     args = p.parse_args(argv)
 
     from agentic_rag.retrieve.config import RetrieveConfig

@@ -63,7 +63,7 @@ class VectorIndex:
 
         points = [
             models.PointStruct(id=c.point_id(), vector=v, payload=c.payload())
-            for c, v in zip(chunks, vectors)
+            for c, v in zip(chunks, vectors, strict=True)
         ]
         bs = self.config.upsert_batch
         for i in range(0, len(points), bs):

@@ -63,7 +63,7 @@ def test_overlap_between_consecutive_chunks():
     assert len(chunks) >= 2
     # With overlap > 0, each chunk after the first must share some text with its
     # predecessor's tail (sentence-level carry-over).
-    for prev, nxt in zip(chunks, chunks[1:]):
+    for prev, nxt in zip(chunks, chunks[1:], strict=False):
         prev_sents = set(split_sentences(prev.text))
         nxt_sents = set(split_sentences(nxt.text))
         assert prev_sents & nxt_sents, "expected overlapping sentence(s)"

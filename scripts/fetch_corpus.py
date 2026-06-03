@@ -79,7 +79,9 @@ def main() -> None:
 
         if dest.exists() and not args.force:
             print(f"{prefix}  skip (exists): {dest.name}")
-            manifest.append({"arxiv_id": arxiv_id, "slug": slug, "file": dest.name, "status": "cached"})
+            manifest.append(
+                {"arxiv_id": arxiv_id, "slug": slug, "file": dest.name, "status": "cached"}
+            )
             continue
 
         try:
@@ -87,11 +89,15 @@ def main() -> None:
             download(arxiv_id, dest)
             size_kb = dest.stat().st_size // 1024
             print(f"{prefix}  done ({size_kb} KB)")
-            manifest.append({"arxiv_id": arxiv_id, "slug": slug, "file": dest.name, "status": "downloaded"})
+            manifest.append(
+                {"arxiv_id": arxiv_id, "slug": slug, "file": dest.name, "status": "downloaded"}
+            )
         except Exception as exc:  # noqa: BLE001 - report and continue
             print(f"{prefix}  FAILED: {exc}")
             failures.append(arxiv_id)
-            manifest.append({"arxiv_id": arxiv_id, "slug": slug, "file": dest.name, "status": f"failed: {exc}"})
+            manifest.append(
+                {"arxiv_id": arxiv_id, "slug": slug, "file": dest.name, "status": f"failed: {exc}"}
+            )
 
         # Throttle only between live downloads, not after cached skips.
         if i < len(PAPERS):
@@ -103,8 +109,10 @@ def main() -> None:
 
     if failures:
         print(f"\n{len(failures)} download(s) failed: {', '.join(failures)}")
-        print("Tip: a failing ID may need a version suffix (e.g. 1706.03762v7). "
-              "Check the paper's arXiv abstract page.")
+        print(
+            "Tip: a failing ID may need a version suffix (e.g. 1706.03762v7). "
+            "Check the paper's arXiv abstract page."
+        )
         raise SystemExit(1)
 
     print(f"\nAll {len(PAPERS)} papers present in {out_dir}/")

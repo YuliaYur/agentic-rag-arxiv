@@ -39,5 +39,5 @@ class BM25Index:
         if not tokens:
             return []
         scores = self._bm25.get_scores(tokens)
-        ranked = sorted(zip(self.ids, scores), key=lambda kv: kv[1], reverse=True)
+        ranked = sorted(zip(self.ids, scores, strict=True), key=lambda kv: kv[1], reverse=True)
         return [(doc_id, float(s)) for doc_id, s in ranked[:limit] if s > 0.0]
