@@ -35,7 +35,32 @@ python scripts/inspect_index.py --query "how does RoBERTa differ from BERT?"
 
 # 4. hybrid retrieval (dense + BM25 + rerank)
 python scripts/search.py "BLEU score for machine translation" --k 5 --compare
+
+# 5. single-shot RAG baseline: cited answer (needs OPENAI_API_KEY in .env; paid call)
+python scripts/ask.py "How does ELECTRA's objective differ from BERT's?"
 ```
+
+## Answering (single-shot baseline)
+
+`retrieve → stuff context → generate` with a structured, **grounded** response:
+the LLM returns an answer plus citations, and a validator enforces that every
+citation and inline `[S#]` marker maps to a retrieved source (else it's flagged),
+or the model must declare the context insufficient. Rationale in
+[`DECISIONS.md`](DECISIONS.md) (ADR-0007).
+
+```python
+from agentic_rag.answer import build_baseline
+
+rag = build_baseline(k=5)                 # wires retriever + LLM client
+res = rag.answer("How does RoBERTa change BERT's pre-training?")
+print(res.answer, res.is_grounded)
+for c in res.citations:
+    print(c.citation())
+```
+
+The LLM is reached through a thin client (`agentic_rag.llm`) designed to route
+through LiteLLM later. This baseline is kept intact for eval comparison against
+the agent.
 
 ## Retrieval
 

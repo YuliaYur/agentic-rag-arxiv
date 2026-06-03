@@ -12,6 +12,7 @@ extend, and may supersede, older ones.
 | 0004 | Embedding model — bge-small-en-v1.5 | Accepted |
 | 0005 | Vector store — local Qdrant, idempotent indexing | Accepted |
 | 0006 | Hybrid retrieval — dense + BM25 + RRF + cross-encoder rerank | Accepted |
+| 0007 | Single-shot RAG baseline — structured, grounded, cited answers | Accepted |
 
 ---
 
@@ -217,3 +218,60 @@ models + scrolls the index once (reuse it).
 result *almost* right → raise `rerank_candidates` or upgrade the reranker
 (`bge-reranker-base`); too slow → lower `rerank_candidates` or
 `use_reranker=False` (compare with `search.py --compare`).
+
+---
+
+## ADR-0007 — Single-shot RAG baseline: structured, grounded, cited answers
+
+**Status:** Accepted (2026-06-03)
+
+**Context.** Before adding an agent (retrieve → grade → generate → cite-check, with
+a re-retrieve loop), we need a **simple, measurable baseline**: retrieve →
+stuff context → generate. Three needs: a swappable LLM client, machine-checkable
+citations, and an honest "I don't know" path.
+
+**Decision.** `src/agentic_rag/answer/` (baseline) + `src/agentic_rag/llm/` (client):
+
+- **Thin LLM client** (`llm/client.py`) exposing only `structured(system, user,
+  schema) -> PydanticModel`. The rest of the app never imports the OpenAI SDK
+  directly, so routing through **LiteLLM** later (caching/fallbacks/multi-provider)
+  touches only this file. Model: **`gpt-4o-mini`**, temperature 0 (faithful
+  extraction, not creativity), `max_tokens` capped for cost.
+- **Structured output** via OpenAI Structured Outputs bound to a Pydantic schema
+  (`CitedAnswer`: `answer`, `citations[]`, `insufficient_context`). The provider
+  returns schema-conforming JSON — validation happens at the API layer, so we get
+  a typed object, not a string to parse.
+- **Three-layer enforcement of "cite every claim, or abstain":**
+  1. *Schema* — the model must return citations and an explicit
+     `insufficient_context` flag (all fields required).
+  2. *Prompt* — use only the numbered sources; put an inline `[S#]` after each
+     claim; if the sources don't answer it, set `insufficient_context=true`,
+     say so in one sentence, cite nothing, and never guess.
+  3. *Programmatic validator* (`validate.py`, the real teeth) — sources are
+     labeled `[S1]..[Sn]`, and that label is the join key: every citation **and**
+     every inline `[S#]` marker must resolve to a retrieved chunk, or it's a
+     **violation**; grounded citations are rebuilt from the chunk's authoritative
+     metadata (so a model-fabricated arxiv_id/section/page is overwritten with the
+     truth); `insufficient_context=false` with no grounded citation is a violation
+     (no uncited claims), and `=true` with citations is a violation.
+
+  We **cannot** verify every sentence has a citation without claim extraction
+  (that's the upcoming cite-check critic's job), but we *can* guarantee nothing
+  cited is fabricated and that the abstain path is honored.
+- **CLI** `scripts/ask.py`; the retriever and LLM are injected into `SingleShotRAG`
+  so the orchestration and all parsing/validation are unit-tested with fakes (no
+  API calls, no spend). When retrieval returns nothing, it abstains **without**
+  calling the LLM.
+
+**Why a measurable baseline before agentic complexity.** An agent adds latency,
+cost, and failure modes (loops, extra LLM calls). Without a baseline you can't
+tell whether that complexity actually *helps* — you'd be guessing. The baseline
+gives a fixed reference point so that, on the same golden set (`eval/`), we can
+quantify the agent's marginal benefit (faithfulness, citation accuracy,
+answer quality) against its marginal cost. If the agent doesn't beat this, it
+isn't worth shipping. Hence the baseline is kept **intact** alongside the agent.
+
+**Consequences.** Cheap, fast, honest single-shot answers with grounded citations
+and a real abstain path; a clean seam for LiteLLM. Limitation: single-shot can't
+recover from poor retrieval (no re-retrieve) and doesn't self-check claim coverage
+— exactly the gaps the agent layer will target and be measured on.
