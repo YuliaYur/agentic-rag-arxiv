@@ -1,0 +1,14 @@
+# Local Qdrant for the RAG vector index.
+#   docker compose up -d        # start (data persists in ./data/qdrant)
+#   docker compose down         # stop
+# Dashboard: http://localhost:6333/dashboard
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: agentic-rag-qdrant
+    ports:
+      - "6333:6333"   # REST + dashboard
+      - "6334:6334"   # gRPC
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+    restart: unless-stopped

@@ -1,0 +1,7 @@
+# Ingestion pipeline dependencies. See pyproject.toml for the packaged project.
+# Install with: pip install -r requirements.txt   (or: pip install -e ".[dev]")
+pymupdf>=1.24,<2.0          # layout-aware PDF parsing (the chosen parser — see DECISIONS.md)
+sentence-transformers>=3.0  # local, free embeddings (pulls torch + transformers)
+qdrant-client>=1.9          # vector index client (talks to the Dockerized Qdrant)
+tqdm>=4.66                  # progress bars
+pytest>=8.0                 # tests (chunking + metadata logic)
