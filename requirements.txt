@@ -7,5 +7,6 @@ rank-bm25>=0.2.2            # in-memory BM25 keyword search (hybrid retrieval)
 openai>=1.40               # LLM client for the single-shot RAG baseline
 pydantic>=2.7              # structured LLM output (answer + citations)
 python-dotenv>=1.0         # load API keys from .env
+langgraph>=0.2             # agentic answer graph (retrieve/grade/generate/critic loop)
 tqdm>=4.66                  # progress bars
 pytest>=8.0                 # tests (chunking + metadata logic)

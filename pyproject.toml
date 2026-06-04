@@ -15,6 +15,7 @@ dependencies = [
     "openai>=1.40",
     "pydantic>=2.7",
     "python-dotenv>=1.0",
+    "langgraph>=0.2",
     "tqdm>=4.66",
 ]
 

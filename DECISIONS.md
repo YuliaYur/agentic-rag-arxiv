@@ -13,6 +13,7 @@ extend, and may supersede, older ones.
 | 0005 | Vector store — local Qdrant, idempotent indexing | Accepted |
 | 0006 | Hybrid retrieval — dense + BM25 + RRF + cross-encoder rerank | Accepted |
 | 0007 | Single-shot RAG baseline — structured, grounded, cited answers | Accepted |
+| 0008 | Agentic answer graph (LangGraph) — grade + cite-critic loops | Accepted |
 
 ---
 
@@ -275,3 +276,63 @@ isn't worth shipping. Hence the baseline is kept **intact** alongside the agent.
 and a real abstain path; a clean seam for LiteLLM. Limitation: single-shot can't
 recover from poor retrieval (no re-retrieve) and doesn't self-check claim coverage
 — exactly the gaps the agent layer will target and be measured on.
+
+---
+
+## ADR-0008 — Agentic answer graph (LangGraph) with grade + cite-critic loops
+
+**Status:** Accepted (2026-06-03)
+
+**Context.** Single-shot RAG (ADR-0007) has two structural gaps: it can't recover
+from weak retrieval, and it doesn't self-check that its claims are actually
+supported. Multi-hop/comparative questions (needing facts from several papers)
+expose both. We want an agent that can *re-retrieve* and *revise* — bounded so it
+can't loop forever — built with **LangGraph** and reusing every existing piece.
+
+**Decision.** `src/agentic_rag/agent/` — a LangGraph `StateGraph` over a typed
+`AgentState` (TypedDict) with four nodes and two capped loops:
+
+```
+START → retrieve → grade_context ─(sufficient | round cap)→ generate → cite_critic ─(supported | rev cap)→ END
+              ↑           │                                      ↑              │
+              └─(weak & rounds left, reformulated query)─────────┘  └─(unsupported & revisions left)─┘
+```
+
+- **retrieve** — hybrid retrieval (ADR-0006), reused unchanged.
+- **grade_context** — an LLM judges relevance/sufficiency (`GradeResult`). If weak,
+  it emits a **reformulated query** and we loop back to retrieve (cap
+  `max_retrieval_rounds=3`). The reformulated query drives *retrieval only*;
+  `generate` always answers the **original** question.
+- **generate** — the baseline's structured cited answer (ADR-0007), reused: same
+  prompt, `CitedAnswer` schema, and grounding validator. On a revision it appends
+  the critic's feedback to the prompt.
+- **cite_critic** — an LLM auditor (`CriticResult`: supported? + score +
+  unsupported_claims + feedback) checks every claim is backed by a cited source.
+  If not, loop back to generate (cap `max_revision_rounds=2`).
+
+**Design choices:**
+- **State is explicit + typed**; caps live *in the state* so the routing functions
+  (`route_after_grade`, `route_after_critic`) are **pure** (state → next-node) and
+  unit-testable with no LLM.
+- **Per-node structured metadata** is appended to `state["trace"]` via an
+  `operator.add` reducer (retrieval_round, grade, sufficient, critic_score, …) —
+  ready for Step 6 (Langfuse) and already surfaced by the CLI.
+- **Two enforcement layers compose:** the programmatic grounding validator (from
+  ADR-0007, in `generate`) guarantees citations aren't fabricated; the LLM
+  `cite_critic` judges *claim coverage* — the part code can't check alone.
+- Nodes are methods on `AgentNodes` (holding retriever + LLM) so LangGraph calls
+  them with just state; dependencies are injected, so tests use fakes.
+
+**Why this should beat the single-shot baseline (esp. multi-hop).** A comparative
+question like "how does ELECTRA's objective differ from BERT *and* RoBERTa?" needs
+chunks from ≥3 papers. One retrieval often misses a paper; single-shot then
+answers from partial context. The agent's grader detects the gap and
+**re-retrieves with a sharper query** until the context covers all hops, and the
+critic catches **unsupported claims** and forces a revision. We'll *measure* this
+on `eval/` (the multi-hop golden questions) against the baseline.
+
+**Consequences.** Higher answer quality/faithfulness on hard questions, with a
+visible reasoning trace — at the cost of **more LLM calls** (grade + generate +
+critic, × loops) and higher latency. Both loops are hard-capped, and LangGraph's
+`recursion_limit` is a final backstop. The single-shot baseline stays intact for
+the eval comparison.

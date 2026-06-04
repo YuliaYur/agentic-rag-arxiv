@@ -38,6 +38,9 @@ python scripts/search.py "BLEU score for machine translation" --k 5 --compare
 
 # 5. single-shot RAG baseline: cited answer (needs OPENAI_API_KEY in .env; paid call)
 python scripts/ask.py "How does ELECTRA's objective differ from BERT's?"
+
+# 6. agentic answer graph: grade + re-retrieve + cite-critic loops (paid; a few calls)
+python scripts/agent_ask.py "How does ELECTRA's objective differ from BERT and RoBERTa?"
 ```
 
 ## Answering (single-shot baseline)
@@ -61,6 +64,31 @@ for c in res.citations:
 The LLM is reached through a thin client (`agentic_rag.llm`) designed to route
 through LiteLLM later. This baseline is kept intact for eval comparison against
 the agent.
+
+## Agentic answer graph
+
+A LangGraph state machine that adds two capped loops the baseline lacks —
+**re-retrieve** when context is weak, and **revise** when claims aren't supported:
+
+```
+START → retrieve → grade_context ─(ok | cap)→ generate → cite_critic ─(supported | cap)→ END
+              ↑           └─(weak, reformulate query)┘          ↑          └─(unsupported, revise)┘
+```
+
+`grade_context` reformulates the query and loops to `retrieve` (≤3 rounds);
+`cite_critic` audits claim support and loops to `generate` (≤2 revisions). Each
+node appends structured metadata to a `trace`. Rationale + why it beats the
+baseline on multi-hop questions: [`DECISIONS.md`](DECISIONS.md) (ADR-0008).
+
+```python
+from agentic_rag.agent import build_agent, run_agent
+
+app = build_agent()
+final = run_agent(app, "How does ELECTRA's objective differ from BERT and RoBERTa?")
+print(final["answer"].answer)        # cited answer
+for e in final["trace"]:             # per-node control-flow metadata
+    print(e["node"], e)
+```
 
 ## Retrieval
 
@@ -136,9 +164,14 @@ src/agentic_rag/retrieve/
   fusion.py     # Reciprocal Rank Fusion
   rerank.py     # cross-encoder reranker
   retriever.py  # HybridRetriever.retrieve(query, k); build_retriever()
+src/agentic_rag/llm/      # thin LLM client (LiteLLM-routable)
+src/agentic_rag/answer/   # single-shot RAG baseline (schemas, prompt, validate)
+src/agentic_rag/agent/    # LangGraph agent (state, nodes, routing, graph)
 scripts/
   fetch_corpus.py    # reproducible corpus download
   inspect_index.py   # index stats + sample query
   search.py          # hybrid retrieval from the CLI
-tests/               # offline unit tests (chunking, metadata, fusion, bm25, retriever)
+  ask.py             # single-shot RAG baseline (cited answer)
+  agent_ask.py       # agentic answer graph (with control-flow trace)
+tests/               # offline unit tests (chunking, metadata, fusion, bm25, retriever, answer, agent)
 ```
