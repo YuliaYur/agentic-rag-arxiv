@@ -15,6 +15,7 @@ from __future__ import annotations
 from agentic_rag.answer.prompt import SYSTEM_PROMPT, build_user_prompt
 from agentic_rag.answer.schemas import CitedAnswer
 from agentic_rag.answer.validate import validate_cited_answer
+from agentic_rag.guardrails import Guardrails
 
 from .config import AgentConfig
 from .prompts import (
@@ -28,22 +29,33 @@ from .state import CriticResult, GradeResult
 
 
 class AgentNodes:
-    def __init__(self, retriever, llm, config: AgentConfig | None = None) -> None:
+    def __init__(
+        self,
+        retriever,
+        llm,
+        config: AgentConfig | None = None,
+        guardrails: Guardrails | None = None,
+    ) -> None:
         self._retriever = retriever
         self._llm = llm
         self._cfg = config or AgentConfig()
+        self._guards = guardrails or Guardrails()
 
     # 1. retrieve -------------------------------------------------------------
     def retrieve(self, state: dict) -> dict:
         rnd = state.get("retrieval_round", 0) + 1
         query = state["question"]
         chunks = self._retriever.retrieve(query, state.get("k", self._cfg.k))
+        # Input guardrail: defang prompt injection in the retrieved text *before*
+        # it reaches any prompt. Sanitized chunks flow downstream to all nodes.
+        chunks, hits = self._guards.sanitize_chunks(chunks)
         entry = {
             "node": "retrieve",
             "retrieval_round": rnd,
             "query": query,
             "n_chunks": len(chunks),
             "top_sources": [c.citation() for c in chunks[:3]],
+            "injection_hits": [h.model_dump() for h in hits],
         }
         return {"chunks": chunks, "retrieval_round": rnd, "trace": [entry]}
 
@@ -111,6 +123,19 @@ class AgentNodes:
             "n_unsupported": len(critic.unsupported_claims),
         }
         return {"critic": critic.model_dump(), "trace": [entry]}
+
+    # 5. output_guard ---------------------------------------------------------
+    def output_guard(self, state: dict) -> dict:
+        """Final gate: structure + abstain + grounding/confidence -> answer | decline."""
+        decision = self._guards.check_output(state.get("answer"), state.get("critic"))
+        entry = {
+            "node": "output_guard",
+            "action": decision.action,
+            "reason": decision.reason,
+            "confidence": decision.confidence,
+            "failed_checks": [c.name for c in decision.checks if not c.passed],
+        }
+        return {"guardrail": decision.model_dump(), "trace": [entry]}
 
 
 # --- routing (pure) ----------------------------------------------------------

@@ -70,6 +70,9 @@ class AgentState(TypedDict, total=False):
     # Critique
     critic: dict[str, Any] | None  # CriticResult.model_dump()
 
+    # Guardrails (output layer's verdict; input-layer hits live in the trace)
+    guardrail: dict[str, Any] | None  # GuardrailDecision.model_dump()
+
     # Caps (kept in state so routing functions stay pure)
     max_retrieval_rounds: int
     max_revision_rounds: int

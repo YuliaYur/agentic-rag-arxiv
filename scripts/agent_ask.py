@@ -25,9 +25,13 @@ def _print_trace(trace: list[dict]) -> None:
     for i, e in enumerate(trace, start=1):
         node = e["node"]
         if node == "retrieve":
+            n_inj = len(e.get("injection_hits", []))
+            flag = f"  injection_hits={n_inj}" if n_inj else ""
             print(
-                f"  {i}. retrieve      round={e['retrieval_round']}  n={e['n_chunks']}  q={e['query'][:60]!r}"
+                f"  {i}. retrieve      round={e['retrieval_round']}  n={e['n_chunks']}  q={e['query'][:60]!r}{flag}"
             )
+            for h in e.get("injection_hits", []):
+                print(f"        ! {h['source_id']} [{h['pattern']}] {h['snippet']!r}")
         elif node == "grade_context":
             print(
                 f"  {i}. grade_context sufficient={e['sufficient']}  -> refined={e['refined_query'][:50]!r}"
@@ -38,6 +42,12 @@ def _print_trace(trace: list[dict]) -> None:
         elif node == "cite_critic":
             print(
                 f"  {i}. cite_critic   supported={e['supported']}  score={e['critic_score']:.2f}  unsupported={e['n_unsupported']}"
+            )
+        elif node == "output_guard":
+            failed = e.get("failed_checks") or []
+            tail = f"  failed={failed}" if failed else ""
+            print(
+                f"  {i}. output_guard  action={e['action']}  reason={e['reason']}  conf={e['confidence']:.2f}{tail}"
             )
 
 
@@ -50,6 +60,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--k", type=int, default=5)
     p.add_argument("--max-retrieval-rounds", type=int, default=3)
     p.add_argument("--max-revision-rounds", type=int, default=2)
+    p.add_argument("--min-confidence", type=float, default=0.5, help="decline below this (0-1)")
+    p.add_argument(
+        "--no-scan-injection", action="store_true", help="disable the input injection guardrail"
+    )
+    p.add_argument(
+        "--flag-only-injection",
+        action="store_true",
+        help="detect+log injection but don't redact (pass chunk text through)",
+    )
     args = p.parse_args(argv)
 
     from dotenv import load_dotenv
@@ -60,29 +79,41 @@ def main(argv: list[str] | None = None) -> int:
 
     from agentic_rag.agent.config import AgentConfig
     from agentic_rag.agent.graph import build_agent, run_agent
+    from agentic_rag.guardrails import Guardrails, GuardrailsConfig
 
     cfg = AgentConfig(
         k=args.k,
         max_retrieval_rounds=args.max_retrieval_rounds,
         max_revision_rounds=args.max_revision_rounds,
     )
+    guards = Guardrails(
+        GuardrailsConfig(
+            scan_injection=not args.no_scan_injection,
+            neutralize_injection=not args.flag_only_injection,
+            min_confidence=args.min_confidence,
+        )
+    )
     print(f"Q: {args.question}\nRunning agent graph ...\n{'-' * 78}")
-    app = build_agent(cfg)
+    app = build_agent(cfg, guards)
     final = run_agent(app, args.question, cfg)
 
     _print_trace(final["trace"])
     ans = final["answer"]
+    decision = final.get("guardrail") or {}
     print("-" * 78)
-    print(ans.answer)
-    if ans.citations:
+    # Show what the guardrail decided to surface (the answer, or a decline message).
+    print(decision.get("final_answer", ans.answer))
+    if decision.get("action") == "answer" and ans.citations:
         print("\nCitations:")
         for c in ans.citations:
             print(f"  {c.citation()}")
     print(
-        f"\n[retrieval_rounds={final['retrieval_round']}  revisions={final['revision_round']}  "
-        f"grounded={ans.is_grounded}  insufficient_context={ans.insufficient_context}]"
+        f"\n[guardrail={decision.get('action', '?')} ({decision.get('reason', '?')})  "
+        f"confidence={decision.get('confidence', 0.0):.2f}  "
+        f"retrieval_rounds={final['retrieval_round']}  revisions={final['revision_round']}  "
+        f"grounded={ans.is_grounded}]"
     )
-    return 0 if ans.is_grounded else 1
+    return 0 if decision.get("action") == "answer" else 1
 
 
 if __name__ == "__main__":

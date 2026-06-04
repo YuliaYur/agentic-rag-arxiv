@@ -143,8 +143,10 @@ def test_happy_path_no_loops():
         "grade_context",
         "generate",
         "cite_critic",
+        "output_guard",
     ]
     assert final["answer"].is_grounded
+    assert final["guardrail"]["action"] == "answer"  # clean answer passes the output guard
     assert len(retriever.queries) == 1
 
 
