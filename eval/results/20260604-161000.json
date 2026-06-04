@@ -1,0 +1,479 @@
+{
+  "config": {
+    "k": 5,
+    "use_ragas": true,
+    "use_judge": true,
+    "n_items": 6
+  },
+  "systems": [
+    "baseline",
+    "agent"
+  ],
+  "per_question": [
+    {
+      "id": "q-0001",
+      "question": "How does ELECTRA's pre-training objective differ from BERT's masked language modeling?",
+      "type": "comparative",
+      "status": "seed",
+      "expected_arxiv_ids": [
+        "2003.10555",
+        "1810.04805"
+      ],
+      "systems": {
+        "baseline": {
+          "answer": "ELECTRA's pre-training objective, called replaced token detection, differs from BERT's masked language modeling (MLM) in that it does not mask tokens but instead replaces some tokens with plausible alternatives from a generator model. ELECTRA trains a discriminative model to predict whether each token in the input was replaced, allowing it to utilize all input tokens for training, whereas BERT's MLM only predicts a small subset of masked tokens, making it less sample-efficient [S1][S5].",
+          "retrieved_arxiv_ids": [
+            "2003.10555",
+            "1907.11692",
+            "1910.10683"
+          ],
+          "cited_arxiv_ids": [
+            "2003.10555"
+          ],
+          "scores": {
+            "recall_at_k": 0.5,
+            "mrr": 1.0,
+            "faithfulness": 0.8888888888888888,
+            "answer_relevancy": 0.85,
+            "context_precision": 1.0,
+            "context_recall": 1.0,
+            "judge_overall_norm": 1.0
+          },
+          "extra": {},
+          "judge": {
+            "correctness": 5,
+            "completeness": 5,
+            "relevance": 5,
+            "overall": 5,
+            "rationale": "The answer accurately describes the differences between ELECTRA's replaced-token detection and BERT's masked language modeling, covering key points such as the use of a generator model and the efficiency of training. It directly addresses the question without any inaccuracies."
+          }
+        },
+        "agent": {
+          "answer": "ELECTRA's pre-training objective differs from BERT's masked language modeling (MLM) in that ELECTRA uses a replaced token detection task, where tokens are replaced with plausible alternatives from a generator model, and the model predicts whether each token was replaced or not, rather than reconstructing masked tokens as in MLM [S5]. In MLM, BERT randomly masks 15% of the input tokens and trains the model to predict these masked tokens, which only involves a small subset of the input [S2][S3]. This makes ELECTRA's approach more sample-efficient because it evaluates all input tokens rather than just the masked ones [S5].",
+          "retrieved_arxiv_ids": [
+            "2003.10555",
+            "1907.11692",
+            "1910.10683"
+          ],
+          "cited_arxiv_ids": [
+            "2003.10555",
+            "1907.11692",
+            "1910.10683"
+          ],
+          "scores": {
+            "recall_at_k": 0.5,
+            "mrr": 1.0,
+            "faithfulness": 1.0,
+            "answer_relevancy": 0.8666666666666667,
+            "context_precision": 1.0,
+            "context_recall": 1.0,
+            "judge_overall_norm": 1.0
+          },
+          "extra": {
+            "retrieval_rounds": 1,
+            "revision_rounds": 2,
+            "guardrail_action": "answer",
+            "confidence": 0.8333333333333334
+          },
+          "judge": {
+            "correctness": 5,
+            "completeness": 5,
+            "relevance": 5,
+            "overall": 5,
+            "rationale": "The answer accurately describes the differences between ELECTRA's replaced-token detection and BERT's masked language modeling, covering all key points from the reference. It explains the efficiency of ELECTRA's approach and directly addresses the question."
+          }
+        }
+      }
+    },
+    {
+      "id": "q-0002",
+      "question": "Which papers address the quadratic cost of self-attention for long sequences, and how?",
+      "type": "multi-hop",
+      "status": "seed",
+      "expected_arxiv_ids": [
+        "2004.05150",
+        "2205.14135"
+      ],
+      "systems": {
+        "baseline": {
+          "answer": "The papers addressing the quadratic cost of self-attention for long sequences include \"Longformer: The Long-Document Transformer\" and \"FlashAttention: Fast and Memory-Efficient Exact Attention.\" Longformer introduces a modified self-attention mechanism that scales linearly with sequence length, allowing it to process long documents effectively, whereas standard self-attention scales quadratically, making it infeasible for long sequences [S1][S2]. FlashAttention proposes an IO-aware exact attention algorithm that reduces memory reads/writes, improving the efficiency of attention mechanisms for long sequences, while also discussing various approximate attention methods that aim to reduce compute and memory requirements [S3][S4].",
+          "retrieved_arxiv_ids": [
+            "2004.05150",
+            "2205.14135"
+          ],
+          "cited_arxiv_ids": [
+            "2004.05150",
+            "2205.14135"
+          ],
+          "scores": {
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "faithfulness": 0.8181818181818182,
+            "answer_relevancy": 0.6666666666666666,
+            "context_precision": 1.0,
+            "context_recall": 0.5714285714285714,
+            "judge_overall_norm": 1.0
+          },
+          "extra": {},
+          "judge": {
+            "correctness": 5,
+            "completeness": 5,
+            "relevance": 5,
+            "overall": 5,
+            "rationale": "The answer accurately identifies both papers and explains their contributions to addressing the quadratic cost of self-attention for long sequences, matching the reference's key points and providing a clear understanding of their mechanisms."
+          }
+        },
+        "agent": {
+          "answer": "The papers that address the quadratic cost of self-attention for long sequences are Longformer and FlashAttention. Longformer introduces a modified self-attention mechanism that scales linearly with sequence length, allowing it to process long documents effectively, whereas standard self-attention scales quadratically, making it infeasible for long sequences [S1][S2]. FlashAttention, while improving the efficiency of attention mechanisms, does not specifically address the quadratic cost but rather focuses on optimizing memory access and computation for long sequences [S3][S4].",
+          "retrieved_arxiv_ids": [
+            "2004.05150",
+            "2205.14135"
+          ],
+          "cited_arxiv_ids": [
+            "2004.05150",
+            "2205.14135"
+          ],
+          "scores": {
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "faithfulness": 0.8571428571428571,
+            "answer_relevancy": 0.6666666666666666,
+            "context_precision": 1.0,
+            "context_recall": 0.5714285714285714,
+            "judge_overall_norm": 0.75
+          },
+          "extra": {
+            "retrieval_rounds": 1,
+            "revision_rounds": 2,
+            "guardrail_action": "answer",
+            "confidence": 0.75
+          },
+          "judge": {
+            "correctness": 4,
+            "completeness": 4,
+            "relevance": 5,
+            "overall": 4,
+            "rationale": "The answer correctly identifies Longformer and FlashAttention as addressing the quadratic cost of self-attention, and it explains Longformer's approach well. However, it slightly misrepresents FlashAttention by stating it does not address the quadratic cost, when it does so by optimizing memory access and computation, which is a key aspect of its design."
+          }
+        }
+      }
+    },
+    {
+      "id": "q-0003",
+      "question": "How does patch tokenization in ViT relate to token embeddings in the original Transformer?",
+      "type": "comparative",
+      "status": "seed",
+      "expected_arxiv_ids": [
+        "2010.11929",
+        "1706.03762"
+      ],
+      "systems": {
+        "baseline": {
+          "answer": "In ViT, patch tokenization involves splitting an input image into non-overlapping patches, which are then flattened and projected into a sequence of token embeddings through a linear projection, similar to how the original Transformer processes token embeddings from a 1D sequence [S2]. Each patch is treated as a token, and positional embeddings are added to these patch embeddings to retain spatial information, akin to the positional embeddings used in the original Transformer [S4]. Thus, both approaches utilize a linear projection to create embeddings from discrete inputs, whether they are image patches or text tokens [S2][S4].",
+          "retrieved_arxiv_ids": [
+            "2103.14030",
+            "2010.11929",
+            "2111.06377",
+            "2012.12877"
+          ],
+          "cited_arxiv_ids": [
+            "2010.11929",
+            "2012.12877"
+          ],
+          "scores": {
+            "recall_at_k": 0.5,
+            "mrr": 0.5,
+            "faithfulness": 1.0,
+            "answer_relevancy": 0.7000000000000001,
+            "context_precision": 0.6388888888888888,
+            "context_recall": 1.0,
+            "judge_overall_norm": 1.0
+          },
+          "extra": {},
+          "judge": {
+            "correctness": 5,
+            "completeness": 5,
+            "relevance": 5,
+            "overall": 5,
+            "rationale": "The answer accurately describes the process of patch tokenization in ViT and its analogy to token embeddings in the original Transformer, covering all key points from the reference without any errors."
+          }
+        },
+        "agent": {
+          "answer": "In ViT, patch tokenization involves splitting an image into non-overlapping patches, which are then treated as tokens, similar to how the original Transformer processes a sequence of token embeddings [S1][S2]. Each patch is flattened and projected into a higher-dimensional space through a linear embedding layer, analogous to the token embeddings in the original Transformer that are also projected to a fixed latent size [S2][S4]. Additionally, positional embeddings are added to these patch tokens to retain spatial information, just as they are added to token embeddings in the original Transformer to maintain positional context [S2][S4].",
+          "retrieved_arxiv_ids": [
+            "2103.14030",
+            "2010.11929",
+            "2111.06377",
+            "2012.12877"
+          ],
+          "cited_arxiv_ids": [
+            "2103.14030",
+            "2010.11929",
+            "2012.12877"
+          ],
+          "scores": {
+            "recall_at_k": 0.5,
+            "mrr": 0.5,
+            "faithfulness": 0.7272727272727273,
+            "answer_relevancy": 0.7000000000000001,
+            "context_precision": 0.6388888888888888,
+            "context_recall": 1.0,
+            "judge_overall_norm": 1.0
+          },
+          "extra": {
+            "retrieval_rounds": 1,
+            "revision_rounds": 2,
+            "guardrail_action": "answer",
+            "confidence": 0.8
+          },
+          "judge": {
+            "correctness": 5,
+            "completeness": 5,
+            "relevance": 5,
+            "overall": 5,
+            "rationale": "The answer accurately describes the process of patch tokenization in ViT, directly relating it to token embeddings in the original Transformer. It covers all key points from the reference, including the flattening and projection of patches, the addition of positional embeddings, and the overall analogy between the two systems."
+          }
+        }
+      }
+    },
+    {
+      "id": "q-0004",
+      "question": "What changes did RoBERTa make to BERT's pre-training recipe?",
+      "type": "comparative",
+      "status": "seed",
+      "expected_arxiv_ids": [
+        "1907.11692",
+        "1810.04805"
+      ],
+      "systems": {
+        "baseline": {
+          "answer": "RoBERTa made several key changes to BERT's pre-training recipe: (1) it trained the model longer with larger batches and over more data; (2) it removed the next sentence prediction (NSP) objective; (3) it trained on longer sequences; and (4) it dynamically changed the masking pattern applied to the training data [S2][S3][S4]. Additionally, RoBERTa utilized a new dataset called CC-NEWS to enhance training [S2].",
+          "retrieved_arxiv_ids": [
+            "2106.09685",
+            "1907.11692",
+            "2004.05150"
+          ],
+          "cited_arxiv_ids": [
+            "1907.11692"
+          ],
+          "scores": {
+            "recall_at_k": 0.5,
+            "mrr": 0.5,
+            "faithfulness": 1.0,
+            "answer_relevancy": 0.7666666666666666,
+            "context_precision": 0.6388888888888888,
+            "context_recall": 1.0,
+            "judge_overall_norm": 0.75
+          },
+          "extra": {},
+          "judge": {
+            "correctness": 4,
+            "completeness": 4,
+            "relevance": 5,
+            "overall": 4,
+            "rationale": "The answer correctly identifies most of the key changes made by RoBERTa compared to BERT, including training longer with larger batches, removing the NSP objective, and using dynamic masking. However, it mentions 'training on longer sequences' which is not explicitly stated in the reference, and it adds information about a new dataset that, while relevant, is not part of the core changes listed in the reference. This leads to a minor omission and slight imprecision."
+          }
+        },
+        "agent": {
+          "answer": "RoBERTa made several changes to BERT's pre-training recipe, including training the model longer, using larger batches, removing the next sentence prediction objective, and training on longer sequences. Additionally, RoBERTa utilized a new dataset called CC-NEWS to better control for training set size effects [S2][S3].",
+          "retrieved_arxiv_ids": [
+            "2106.09685",
+            "1907.11692",
+            "2004.05150"
+          ],
+          "cited_arxiv_ids": [
+            "1907.11692"
+          ],
+          "scores": {
+            "recall_at_k": 0.5,
+            "mrr": 0.5,
+            "faithfulness": 1.0,
+            "answer_relevancy": 0.8333333333333334,
+            "context_precision": 0.6388888888888888,
+            "context_recall": 0.8888888888888888,
+            "judge_overall_norm": 0.75
+          },
+          "extra": {
+            "retrieval_rounds": 1,
+            "revision_rounds": 2,
+            "guardrail_action": "answer",
+            "confidence": 0.8
+          },
+          "judge": {
+            "correctness": 4,
+            "completeness": 4,
+            "relevance": 5,
+            "overall": 4,
+            "rationale": "The answer correctly identifies several key changes made by RoBERTa, such as training longer, using larger batches, and removing the next-sentence prediction objective. However, it inaccurately mentions 'training on longer sequences' instead of 'using dynamic masking' and does not mention the larger byte-level BPE vocabulary, which are important points from the reference."
+          }
+        }
+      }
+    },
+    {
+      "id": "q-0005",
+      "question": "What scaling relationship did Kaplan et al. find, and how did Chinchilla revise the compute-optimal trade-off?",
+      "type": "multi-hop",
+      "status": "seed",
+      "expected_arxiv_ids": [
+        "2001.08361",
+        "2203.15556"
+      ],
+      "systems": {
+        "baseline": {
+          "answer": "Kaplan et al. found that for a 10\u00d7 increase in computational budget, the model size should increase by 5.5\u00d7 while the number of training tokens should only increase by 1.8\u00d7 [S1]. In contrast, Chinchilla revised this trade-off by suggesting that model size and the number of training tokens should be scaled in equal proportions, leading to a model that is 4 times smaller but trained on 4 times more tokens compared to previous models like Gopher [S2].",
+          "retrieved_arxiv_ids": [
+            "2203.15556"
+          ],
+          "cited_arxiv_ids": [
+            "2203.15556"
+          ],
+          "scores": {
+            "recall_at_k": 0.5,
+            "mrr": 1.0,
+            "faithfulness": 0.8,
+            "answer_relevancy": 0.7999999999999999,
+            "context_precision": 1.0,
+            "context_recall": 0.5555555555555556,
+            "judge_overall_norm": 0.75
+          },
+          "extra": {},
+          "judge": {
+            "correctness": 4,
+            "completeness": 4,
+            "relevance": 4,
+            "overall": 4,
+            "rationale": "The answer correctly identifies the scaling relationship found by Kaplan et al. and summarizes Chinchilla's revision, but it omits the specific detail about the power-law relationships and the exact ratio of tokens per parameter. Overall, it is accurate and relevant, with minor omissions."
+          }
+        },
+        "agent": {
+          "answer": "Kaplan et al. found that for a 10\u00d7 increase in computational budget, the model size should increase by 5.5\u00d7 while the number of training tokens should only increase by 1.8\u00d7 [S1]. In contrast, Chinchilla revised this compute-optimal trade-off by suggesting that model size and the number of training tokens should be scaled in equal proportions, leading to a model that is 4 times smaller but trained on 4 times more tokens compared to previous models [S2][S5].",
+          "retrieved_arxiv_ids": [
+            "2203.15556"
+          ],
+          "cited_arxiv_ids": [
+            "2203.15556"
+          ],
+          "scores": {
+            "recall_at_k": 0.5,
+            "mrr": 1.0,
+            "faithfulness": 1.0,
+            "answer_relevancy": 0.7999999999999999,
+            "context_precision": 1.0,
+            "context_recall": 0.6666666666666666,
+            "judge_overall_norm": 0.75
+          },
+          "extra": {
+            "retrieval_rounds": 1,
+            "revision_rounds": 2,
+            "guardrail_action": "answer",
+            "confidence": 0.8333333333333334
+          },
+          "judge": {
+            "correctness": 4,
+            "completeness": 4,
+            "relevance": 5,
+            "overall": 4,
+            "rationale": "The answer correctly identifies the scaling relationship found by Kaplan et al. and summarizes Chinchilla's revision, but it omits the specific detail about the power-law relationship and the argument regarding undertraining. Overall, it is accurate and relevant, with minor omissions."
+          }
+        }
+      }
+    },
+    {
+      "id": "q-0006",
+      "question": "What optimizer and learning-rate schedule does the original Transformer use?",
+      "type": "factual",
+      "status": "seed",
+      "expected_arxiv_ids": [
+        "1706.03762"
+      ],
+      "systems": {
+        "baseline": {
+          "answer": "The original Transformer uses the Adam optimizer and employs a learning rate schedule with a 3000 step linear warmup followed by a cosine decay to zero [S3].",
+          "retrieved_arxiv_ids": [
+            "2103.14030",
+            "2012.12877",
+            "2001.08361",
+            "1910.10683",
+            "2103.00020"
+          ],
+          "cited_arxiv_ids": [
+            "2001.08361"
+          ],
+          "scores": {
+            "recall_at_k": 0.0,
+            "mrr": 0.0,
+            "faithfulness": 0.75,
+            "answer_relevancy": 0.7999999999999999,
+            "context_precision": 0.0,
+            "context_recall": 0.16666666666666666,
+            "judge_overall_norm": 0.25
+          },
+          "extra": {},
+          "judge": {
+            "correctness": 2,
+            "completeness": 2,
+            "relevance": 3,
+            "overall": 2,
+            "rationale": "The answer correctly identifies the Adam optimizer but inaccurately describes the learning rate schedule, stating it uses cosine decay instead of the specified linear warmup followed by inverse square root decay. This leads to significant omissions and inaccuracies."
+          }
+        },
+        "agent": {
+          "answer": "I don't have enough information in the provided sources.",
+          "retrieved_arxiv_ids": [
+            "2004.05150",
+            "2010.11929",
+            "1910.10683",
+            "2106.09685",
+            "1907.11692"
+          ],
+          "cited_arxiv_ids": [],
+          "scores": {
+            "recall_at_k": 0.0,
+            "mrr": 0.0,
+            "faithfulness": 0.0,
+            "answer_relevancy": 0.0,
+            "context_precision": 0.0,
+            "context_recall": 0.0,
+            "judge_overall_norm": 0.0
+          },
+          "extra": {
+            "retrieval_rounds": 3,
+            "revision_rounds": 2,
+            "guardrail_action": "decline",
+            "confidence": 0.0
+          },
+          "judge": {
+            "correctness": 1,
+            "completeness": 1,
+            "relevance": 1,
+            "overall": 1,
+            "rationale": "The answer refuses to provide information despite the reference clearly stating the optimizer and learning-rate schedule used in the original Transformer. This refusal is unjustified, leading to a low score."
+          }
+        }
+      }
+    }
+  ],
+  "aggregates": {
+    "baseline": {
+      "recall_at_k": 0.5,
+      "mrr": 0.6666666666666666,
+      "faithfulness": 0.8761784511784512,
+      "answer_relevancy": 0.7638888888888888,
+      "context_precision": 0.7129629629629629,
+      "context_recall": 0.7156084656084656,
+      "judge_overall_norm": 0.7916666666666666,
+      "n_errors": 0
+    },
+    "agent": {
+      "recall_at_k": 0.5,
+      "mrr": 0.6666666666666666,
+      "faithfulness": 0.7640692640692641,
+      "answer_relevancy": 0.6444444444444445,
+      "context_precision": 0.7129629629629629,
+      "context_recall": 0.6878306878306878,
+      "judge_overall_norm": 0.7083333333333334,
+      "n_errors": 0
+    }
+  },
+  "generated_at": "20260604-161000"
+}

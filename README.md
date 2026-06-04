@@ -197,6 +197,29 @@ Re-runs are **idempotent**: deterministic point ids mean re-running never
 duplicates, and a stale-tail prune keeps the index consistent if chunking
 parameters change.
 
+## Evaluation
+
+A golden set + automated metric suite that compares the **baseline** and the
+**agent** head-to-head. Full guide (metrics explained, how to read the scores):
+[`eval/README.md`](eval/README.md); rationale in [`DECISIONS.md`](DECISIONS.md)
+(ADR-0011).
+
+```bash
+python scripts/eval_run.py --status seed     # the curated questions (cheap)
+python scripts/eval_run.py                   # full set (after curating drafts)
+```
+
+Three metric layers: **retrieval** (recall@k, MRR vs the expected papers),
+**RAGAS-style** answer/context metrics (faithfulness, answer relevancy, context
+precision/recall — implemented natively, not via the `ragas` package, which
+conflicts with our langchain-core 1.x; see ADR-0011), and an **LLM-judge** (1–5
+rubric). Results (JSON + a Markdown comparison table) are written to and versioned
+under [`eval/results/`](eval/results/).
+
+> The ~30-question golden set is a **mix of single-hop and cross-paper multi-hop**
+> questions. The 24 `draft` reference answers are machine-generated and **await
+> expert curation** before their metrics should be trusted.
+
 ## Tests & quality
 
 ```bash
@@ -233,11 +256,14 @@ src/agentic_rag/answer/     # single-shot RAG baseline (schemas, prompt, validat
 src/agentic_rag/agent/      # LangGraph agent (state, nodes, routing, graph)
 src/agentic_rag/guardrails/ # injection neutralization (input) + abstain/confidence gate (output)
 src/agentic_rag/observability/ # optional Langfuse tracing (NoOp when disabled)
+src/agentic_rag/eval/       # eval harness (dataset, systems, metrics, judge, runner, report)
 scripts/
   fetch_corpus.py    # reproducible corpus download
   inspect_index.py   # index stats + sample query
   search.py          # hybrid retrieval from the CLI
   ask.py             # single-shot RAG baseline (cited answer)
   agent_ask.py       # agentic answer graph + guardrails (with control-flow trace)
-tests/               # offline unit tests (chunking, metadata, fusion, bm25, retriever, answer, agent, guardrails, observability)
+  eval_run.py        # run the eval suite (baseline vs agent) -> eval/results/
+eval/                # committed: golden_set.jsonl + results/ (versioned runs)
+tests/               # offline unit tests (chunking, fusion, bm25, retriever, answer, agent, guardrails, observability, eval)
 ```

@@ -16,6 +16,7 @@ extend, and may supersede, older ones.
 | 0008 | Agentic answer graph (LangGraph) — grade + cite-critic loops | Accepted |
 | 0009 | Guardrails — injection neutralization (input) + abstain/confidence gate (output) | Accepted |
 | 0010 | Observability — self-hosted Langfuse tracing, toggleable, fail-safe | Accepted |
+| 0011 | Evaluation harness — golden set + native RAGAS-style metrics + LLM-judge | Accepted |
 
 ---
 
@@ -472,3 +473,69 @@ overhead when disabled. Costs: an extra (optional) two-container stack to run
 locally, and we're pinned to Langfuse **v2** — if we later need v3 features
 (multi-modal, evals UI) the compose + SDK pin must be revisited. The facade keeps
 that blast radius to one module.
+
+---
+
+## ADR-0011 — Evaluation harness: golden set + native RAGAS-style metrics + LLM-judge
+
+**Status:** Accepted (2026-06-04)
+
+**Context.** We need to measure whether the agent (ADR-0008) actually beats the
+single-shot baseline (ADR-0007), on questions that matter — especially the
+cross-paper multi-hop ones. That requires a curated golden set, retrieval and
+answer-quality metrics, an overall quality judgment, and a reproducible
+comparison, eventually gated in CI.
+
+**Decision.** An evaluation package `src/agentic_rag/eval/` plus a committed
+`eval/` dataset + results, run by `scripts/eval_run.py`.
+
+- **Golden set** (`eval/golden_set.jsonl`): ~30 questions, each with `question`,
+  `type` (factual / comparative / multi-hop), `expected_arxiv_ids`,
+  `reference_answer`, and a `status`. A deliberate mix of single-hop and
+  cross-paper questions grounded in the 20-paper corpus. The 6 originals are
+  `seed`; 24 are machine-generated **`draft`s flagged for the domain expert to
+  curate** — reference answers are only as trustworthy as that review.
+- **Metrics, three layers:** (1) **retrieval** — recall@k and MRR vs
+  `expected_arxiv_ids` (no LLM, deterministic); (2) **RAGAS-style** —
+  faithfulness, answer relevancy, context precision, context recall; (3) an
+  **LLM-judge** giving a 1–5 rubric score (correctness / completeness /
+  relevance) normalized to [0,1].
+- **Systems are adapters** (`BaselineSystem`, `AgentSystem`) reduced to one
+  `SystemResult` (answer + contexts + retrieved/cited ids), so the runner is
+  system-agnostic. The runner writes a JSON + Markdown comparison table to
+  `eval/results/`.
+
+**Key decision — native RAGAS-style metrics, not the `ragas` package.** The
+`ragas` library pins an older langchain stack and fails to import against this
+project's **langchain-core 1.x** (pulled by `langgraph`): they are mutually
+incompatible in one environment (langgraph wants core ≥1, ragas wants core <1).
+Rather than destabilize the working agent by downgrading, we **implement RAGAS's
+metric definitions natively** over our own `LLMClient`. Benefits: no dependency
+conflict, the metrics are offline-testable with a fake LLM (the repo's testing
+rule), fully transparent (you can read exactly how each score is computed), and
+auto-traced in Langfuse. Cost: it's "RAGAS-style," not the literal package, and
+answer-relevancy uses an LLM-judged variant rather than RAGAS's embedding cosine
+(to avoid a second embedding model in the loop).
+
+**Design choices.**
+- **Injected LLM/systems** → the whole harness (dataset, metrics, judge, runner,
+  report) is unit-tested offline with fakes; the only network is the real
+  `eval_run.py`.
+- **Errors are captured per (question, system)**, not fatal — one bad question
+  can't sink a run; the report shows an error count.
+- **`status` gating** lets the live run target the curated `seed`/`reviewed`
+  subset (cheap, meaningful) while drafts await review and CI stays deterministic.
+- **Results are versioned** (`eval/results/`) so metric drift is diffable over
+  time — the basis for the planned CI gate.
+
+**Consequences.** A reproducible, well-documented baseline-vs-agent comparison
+that already surfaced real findings (e.g., a retrieval miss where the baseline
+hallucinated a confident wrong answer while the agent abstained — the judge
+rewarded the confident-wrong answer, flagging both a retrieval gap and a rubric
+question). It does **not** yet show the agent winning: on the small curated set
+several multi-hop questions have tied recall (both systems miss the same second
+paper), so the agent's re-retrieve loop has nothing to recover and its extra steps
+only add cost — exactly the hypothesis the expanded, curated set must test. The
+harness deliberately makes that measurable instead of assumed. Limitation: LLM-scored
+metrics are noisy and model-dependent — read them as relative signals, gate CI on
+the vetted subset, and treat per-question inspection as part of the workflow.

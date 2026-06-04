@@ -1,0 +1,26 @@
+# Evaluation results (20260604-161000)
+
+Golden questions: **6** · k=**5** · RAGAS-style metrics: on · LLM-judge: on. All scores in [0,1], higher is better.
+
+| Metric | baseline | agent | Winner |
+|---|---|---|---|
+| Recall@k | 0.500 | 0.500 | tie |
+| MRR | 0.667 | 0.667 | tie |
+| Faithfulness | 0.876 | 0.764 | baseline |
+| Answer rel. | 0.764 | 0.644 | baseline |
+| Ctx prec. | 0.713 | 0.713 | tie |
+| Ctx recall | 0.716 | 0.688 | baseline |
+| Judge | 0.792 | 0.708 | baseline |
+
+_Errors — baseline: 0 errors · agent: 0 errors._
+
+## Per-question (judge overall, normalized)
+
+| id | type | baseline | agent |
+|---|---|---|---|
+| q-0001 | comparative | 1.000 | 1.000 |
+| q-0002 | multi-hop | 1.000 | 0.750 |
+| q-0003 | comparative | 1.000 | 1.000 |
+| q-0004 | comparative | 0.750 | 0.750 |
+| q-0005 | multi-hop | 0.750 | 0.750 |
+| q-0006 | factual | 0.250 | 0.000 |
