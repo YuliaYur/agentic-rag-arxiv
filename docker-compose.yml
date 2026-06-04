@@ -3,7 +3,7 @@
 #   docker compose down         # stop
 #
 # Qdrant dashboard:  http://localhost:6333/dashboard
-# Langfuse UI:       http://localhost:3000   (login: dev@local / localdevpassword)
+# Langfuse UI:       http://localhost:3000   (login: dev@example.com / localdevpassword)
 #
 # Langfuse is the self-hosted v2 stack (one server + Postgres) — light enough to run
 # locally. A project and API keys are auto-provisioned on first boot via the
@@ -50,7 +50,9 @@ services:
       # Local-dev secrets — do NOT use these values anywhere real.
       NEXTAUTH_SECRET: local-dev-not-a-secret-change-me
       SALT: local-dev-salt-change-me
-      ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      # Must be quoted: a bare hex/number string is otherwise parsed as a YAML
+      # number. 64 hex chars (256-bit); regenerate with `openssl rand -hex 32`.
+      ENCRYPTION_KEY: "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
       TELEMETRY_ENABLED: "false"
       LANGFUSE_INIT_ORG_ID: local
       LANGFUSE_INIT_ORG_NAME: Local
@@ -58,7 +60,7 @@ services:
       LANGFUSE_INIT_PROJECT_NAME: agentic-rag-arxiv
       LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-local-dev
       LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-local-dev
-      LANGFUSE_INIT_USER_EMAIL: dev@local
+      LANGFUSE_INIT_USER_EMAIL: dev@example.com
       LANGFUSE_INIT_USER_NAME: dev
       LANGFUSE_INIT_USER_PASSWORD: localdevpassword
     restart: unless-stopped

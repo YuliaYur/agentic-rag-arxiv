@@ -134,7 +134,7 @@ python scripts/agent_ask.py "How does ELECTRA differ from BERT?" --trace
 # ... prints: Langfuse trace: http://localhost:3000/...
 ```
 
-**Open the UI:** browse to `http://localhost:3000`, log in with `dev@local` /
+**Open the UI:** browse to `http://localhost:3000`, log in with `dev@example.com` /
 `localdevpassword`, open the **agentic-rag-arxiv** project → **Tracing → Traces**,
 and click the latest `agent-run` (or follow the URL the CLI prints).
 
