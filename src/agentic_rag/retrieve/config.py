@@ -30,5 +30,11 @@ class RetrieveConfig:
     rerank_candidates: int = 30
     use_reranker: bool = True
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # The reranker is BLENDED with fusion (RRF over both rankings) rather than
+    # replacing it: a general-purpose cross-encoder can confidently misrank an
+    # ambiguous query (e.g. promoting any paper's "training details" section for
+    # "the original Transformer's optimizer"), so we keep the fusion signal as a
+    # safety net. This constant damps the blend the same way rrf_k damps fusion.
+    rerank_rrf_k: int = 60
 
     final_k: int = 5  # default number of chunks returned to the caller

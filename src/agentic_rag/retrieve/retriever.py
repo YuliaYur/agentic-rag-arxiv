@@ -61,14 +61,22 @@ class HybridRetriever:
                 )
             )
 
-        # Rerank the top fused candidates with the cross-encoder (the costly step).
+        # Rerank the top fused candidates with the cross-encoder (the costly step),
+        # then BLEND the rerank order with the fusion order via RRF. Pure rerank-sort
+        # discards the fusion signal and lets the cross-encoder bury a fusion-strong
+        # result on ambiguous queries; blending keeps a candidate that's strong in
+        # *both* on top while still letting the reranker promote within the head.
         if self._reranker is not None and cfg.use_reranker and candidates:
             head = candidates[: cfg.rerank_candidates]
             tail = candidates[cfg.rerank_candidates :]
             scores = self._reranker.score(query, [c.text for c in head])
             for c, s in zip(head, scores, strict=True):
                 c.rerank_score = s
-            head.sort(key=lambda c: c.rerank_score, reverse=True)
+            fusion_order = [c.id for c in head]  # head is already in fusion order
+            rerank_order = [c.id for c in sorted(head, key=lambda c: c.rerank_score, reverse=True)]
+            blended = reciprocal_rank_fusion([fusion_order, rerank_order], k=cfg.rerank_rrf_k)
+            position = {doc_id: i for i, (doc_id, _score) in enumerate(blended)}
+            head.sort(key=lambda c: position[c.id])
             candidates = head + tail
 
         return candidates[:k]

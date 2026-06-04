@@ -593,3 +593,55 @@ the durable robustness gain; the remaining gap is a **retrieval** problem (the n
 lever), not a loop problem. Caveat: results are from one run on 6 questions and
 q-0006 is unstable across runs — conclusions firm up after the golden set is
 curated and expanded.
+
+## ADR-0013 — Rerank/fusion blend: keep the fusion signal as a safety net
+
+**Status:** Accepted (2026-06-04)
+
+**Context.** ADR-0012 closed the agent-loop gap and named the remaining weak
+spot a "retrieval problem" (q-0006: "What optimizer and learning-rate schedule
+does the original Transformer use?" — recall@5 = 0). The CLAUDE.md "Next" note
+inherited that label and proposed fixing it at the *fusion/indexing* stage.
+Tracing q-0006 through every stage of the live pipeline (a throwaway probe,
+since removed) showed that diagnosis was **wrong**:
+
+| stage | rank of the correct chunk (Transformer §5.3 Optimizer, p.7) |
+|---|---|
+| dense | 6 |
+| BM25 | 12 |
+| **fused (RRF)** | **3** |
+| **pure rerank-sort** | **10** (rerank score **−2.73**) |
+
+Fusion ranks the right chunk **3rd**. The cross-encoder then *buries* it to 10th
+while confidently promoting other papers' training sections (DeiT "Training
+details" +2.52, Scaling-Laws "Training Procedures" +1.61, T5 "Training" −1.88).
+The query is ambiguous — every paper in a *coherent lineage* corpus has an
+optimizer / LR-schedule section — and a general-purpose `ms-marco-MiniLM`
+cross-encoder has no signal for *which* paper is "the original Transformer," so
+it ranks on generic "training-details" surface similarity. The failure is
+**rerank over-confidence**, not a retrieval miss.
+
+**Decision.** Stop letting the reranker *replace* the fusion ranking; **blend**
+the two. After scoring the fused head with the cross-encoder, RRF-fuse the
+fusion order with the rerank order (`rerank_rrf_k = 60`, mirroring `rrf_k`) and
+sort by the blended rank. A chunk strong in *both* signals stays on top; the
+reranker can still reorder within the head, but it can no longer single-handedly
+bury a fusion-strong chunk. This treats the cross-encoder as **one ranker among
+two**, not an oracle — symmetric with how RRF already hedges dense vs. BM25.
+
+**Consequences.** On the seed set, retrieval recall@5 is **pure upside**:
+
+| | q-0001 | q-0002 | q-0003 | q-0004 | q-0005 | q-0006 | mean |
+|---|---|---|---|---|---|---|---|
+| pure rerank-sort | 0.50 | 1.00 | 0.50 | 0.50 | 0.50 | **0.00** | 0.500 |
+| RRF blend | 0.50 | 1.00 | 0.50 | 0.50 | 0.50 | **1.00** | **0.667** |
+
+q-0006 recovers (0 → 1; the correct chunk lands at final rank 4) and **every
+other question is byte-identical** — the blend only changes the outcome where
+the reranker was actively burying a fusion-strong chunk. Unit tests encode the
+logic and the exact pathology (`test_reranker_blends_with_fusion`,
+`test_fusion_strong_survives_a_bad_reranker`). This supersedes the CLAUDE.md
+"improve query reformulation/indexing" note for q-0006. The **remaining** seed
+weakness is unrelated: the cross-paper questions (q-0001/3/4/5) sit at 0.50
+because they each expect *two* papers and retrieval surfaces only one — a
+multi-hop coverage gap, the next retrieval lever.

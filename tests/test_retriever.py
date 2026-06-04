@@ -84,8 +84,9 @@ def test_fusion_promotes_doc_strong_in_both():
     assert hits[0].dense_rank == 1
 
 
-def test_reranker_reorders_results():
-    # Fusion would put d1 first, but the reranker prefers d3 -> d3 must end up first.
+def test_reranker_blends_with_fusion():
+    # Reranker strongly prefers d3 (a mid-fusion doc): the blend promotes d3 into the
+    # top results, while the fusion-#1 doc (d1) is NOT buried -> both sit at the top.
     scores = {c.text: 0.0 for c in CHUNKS}
     scores[CHUNKS[2].text] = 9.9  # d3 gets the top rerank score
     rr = FakeReranker(scores)
@@ -94,9 +95,27 @@ def test_reranker_reorders_results():
         CHUNKS, FakeDense(["d1", "d2", "d3", "d4"]), _bm25(), reranker=rr, config=cfg
     )
     hits = r.retrieve("transformer", k=4)
-    assert hits[0].id == "d3"
-    assert hits[0].rerank_score == 9.9
+    top2 = {hits[0].id, hits[1].id}
+    assert "d3" in top2  # reranker promoted d3 from mid-fusion
+    assert "d1" in top2  # but the fusion-strong doc is not discarded
     assert rr.called_with is not None  # reranker actually invoked
+
+
+def test_fusion_strong_survives_a_bad_reranker():
+    # The q-0006 failure mode: a doc strong in fusion (d2, forced to fusion #1) but
+    # which the reranker hates, while the reranker loves a fusion-weak doc (d4).
+    # Pure rerank-sort would bury d2 at the bottom; the blend keeps it in the top-k.
+    scores = {c.text: 0.0 for c in CHUNKS}
+    scores[CHUNKS[1].text] = -9.9  # d2: reranker hates the fusion-strong doc
+    scores[CHUNKS[3].text] = 9.9  # d4: reranker loves a fusion-weak doc
+    rr = FakeReranker(scores)
+    cfg = RetrieveConfig(use_reranker=True, rerank_candidates=10)
+    r = HybridRetriever(
+        CHUNKS, FakeDense(["d2", "d1", "d3", "d4"]), _bm25(), reranker=rr, config=cfg
+    )
+    hits = r.retrieve("glue benchmark", k=2)  # bm25 also favors d2 -> d2 is fusion #1
+    ids = [h.id for h in hits]
+    assert "d2" in ids  # not buried by the reranker that hated it
 
 
 def test_k_limit_respected():
