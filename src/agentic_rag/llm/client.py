@@ -10,6 +10,7 @@ structured outputs.
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from typing import TypeVar
 
 from pydantic import BaseModel
@@ -55,6 +56,9 @@ class LLMClient:
         if parse is None:
             parse = self._client.beta.chat.completions.parse
 
+        # Bracket the call so the traced generation gets the real latency (we record
+        # it after the call returns, so without these timestamps it would read ~0ms).
+        start = datetime.now(UTC)
         completion = parse(
             model=self.config.model,
             messages=messages,
@@ -62,6 +66,7 @@ class LLMClient:
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
         )
+        end = datetime.now(UTC)
         message = completion.choices[0].message
         if getattr(message, "refusal", None):
             raise LLMRefusal(message.refusal)
@@ -70,10 +75,12 @@ class LLMClient:
 
         # Record the call for tracing: token usage lets Langfuse compute cost from
         # its model price list. No-op (and no import cost) when tracing is disabled.
-        self._trace_generation(schema.__name__, messages, message.parsed, completion)
+        self._trace_generation(schema.__name__, messages, message.parsed, completion, start, end)
         return message.parsed
 
-    def _trace_generation(self, name: str, messages: list, parsed: T, completion) -> None:
+    def _trace_generation(
+        self, name: str, messages: list, parsed: T, completion, start, end
+    ) -> None:
         from agentic_rag.observability import get_tracer
 
         usage = getattr(completion, "usage", None)
@@ -93,4 +100,6 @@ class LLMClient:
             input=messages,
             output=parsed.model_dump(),
             usage=usage_details,
+            start_time=start,
+            end_time=end,
         )

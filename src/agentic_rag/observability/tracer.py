@@ -67,6 +67,8 @@ class NoOpTracer:
         input: Any = None,
         output: Any = None,
         usage: dict | None = None,
+        start_time: Any = None,
+        end_time: Any = None,
     ) -> None:
         pass
 
@@ -139,14 +141,18 @@ class LangfuseTracer:
         input: Any = None,
         output: Any = None,
         usage: dict | None = None,
+        start_time: Any = None,
+        end_time: Any = None,
     ) -> None:
         parent = self._stack[-1] if self._stack else self._client
         if parent is None:
             return
 
         def make():
-            gen = parent.generation(name=name, model=model, input=input, usage=usage)
-            gen.end(output=output)
+            gen = parent.generation(
+                name=name, model=model, input=input, usage=usage, start_time=start_time
+            )
+            gen.end(output=output, end_time=end_time)
 
         self._safe(make)
 

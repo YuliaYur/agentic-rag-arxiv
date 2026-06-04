@@ -90,8 +90,12 @@ class FakeTracer:
         self.spans.append(s)
         yield s
 
-    def generation(self, name, *, model, input=None, output=None, usage=None):
-        self.generations.append({"name": name, "model": model, "usage": usage})
+    def generation(
+        self, name, *, model, input=None, output=None, usage=None, start_time=None, end_time=None
+    ):
+        self.generations.append(
+            {"name": name, "model": model, "usage": usage, "dur": (start_time, end_time)}
+        )
 
     def flush(self):
         pass
