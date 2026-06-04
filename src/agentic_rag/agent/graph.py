@@ -113,11 +113,14 @@ def run_agent(app, question: str, config: AgentConfig | None = None) -> dict:
     with get_tracer().trace("agent-run", input=question) as root:
         final = app.invoke(initial_state(question, config), {"recursion_limit": 50})
         decision = final.get("guardrail") or {}
+        answer = final.get("answer")
+        citations = [c.citation() for c in answer.citations] if answer else []
         root.update(
             output={
                 "action": decision.get("action"),
                 "answer": decision.get("final_answer"),
                 "confidence": decision.get("confidence"),
+                "citations": citations,
             },
             metadata={
                 "retrieval_rounds": final.get("retrieval_round"),

@@ -98,6 +98,8 @@ class AgentNodes:
             "is_revision": is_revision,
             "grounded": validated.is_grounded,
             "n_citations": len(validated.citations),
+            # Resolved, human-readable citations (title + section + page), rebuilt
+            "citations": [c.citation() for c in validated.citations],
             "insufficient_context": validated.insufficient_context,
         }
         return {

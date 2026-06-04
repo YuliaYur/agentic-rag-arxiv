@@ -98,8 +98,33 @@ class LLMClient:
             name=name,
             model=self.config.model,
             input=messages,
-            output=parsed.model_dump(),
+            output=_repair_mojibake(parsed.model_dump()),
             usage=usage_details,
             start_time=start,
             end_time=end,
         )
+
+
+# Markers of UTF-8 text that was misdecoded as cp1251/latin-1 (e.g. "§" -> "В§").
+# gpt-4o-mini occasionally emits this when copying the "§" we put in source headers.
+_MOJIBAKE_MARKERS = ("Â", "Ã", "В", "Ð", "â€")
+
+
+def _repair_mojibake(value):
+    """Best-effort repair of cp1251/latin-1 mojibake in traced model output.
+
+    Only touches strings that actually show a mojibake marker (so clean text is
+    never altered), and only if the round-trip decodes cleanly. Walks dicts/lists.
+    """
+    if isinstance(value, str):
+        if any(m in value for m in _MOJIBAKE_MARKERS):
+            try:
+                return value.encode("cp1251").decode("utf-8")
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                return value
+        return value
+    if isinstance(value, list):
+        return [_repair_mojibake(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _repair_mojibake(v) for k, v in value.items()}
+    return value

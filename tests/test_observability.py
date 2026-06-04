@@ -178,3 +178,22 @@ def test_tracing_disabled_run_is_identical():
 def _reset_tracer():
     yield
     configure_tracer(None)
+
+
+# --- mojibake repair for traced model output --------------------------------
+
+
+def test_repair_mojibake_fixes_section_symbol():
+    from agentic_rag.llm.client import _repair_mojibake
+
+    out = _repair_mojibake({"citations": [{"section": "В§3.4 LARGE MODELS", "page": 7}]})
+    assert out["citations"][0]["section"] == "§3.4 LARGE MODELS"
+
+
+def test_repair_mojibake_leaves_clean_text_untouched():
+    from agentic_rag.llm.client import _repair_mojibake
+
+    clean = {"answer": "BERT uses MLM [S1].", "section": "3.4 LARGE MODELS", "page": 7}
+    assert _repair_mojibake(clean) == clean
+    # a correctly-encoded § must be preserved, not mangled
+    assert _repair_mojibake("§3.4") == "§3.4"
