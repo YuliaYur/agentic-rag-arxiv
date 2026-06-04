@@ -68,7 +68,11 @@ def _grade(sufficient, refined="better query"):
     return GradeResult(sufficient=sufficient, reasoning="r", refined_query=refined)
 
 
-def _critic(supported, score=1.0):
+def _critic(supported, score=None):
+    # Unsupported drafts default to a low score (below accept_score) so they trigger
+    # a revision; supported drafts score 1.0.
+    if score is None:
+        score = 1.0 if supported else 0.4
     return CriticResult(
         supported=supported,
         score=score,
@@ -185,3 +189,27 @@ def test_revision_round_cap():
     assert final["revision_round"] == 1  # capped
     # initial generate + 1 revision = 2 generate calls, then stop
     assert llm.calls.count("CitedAnswer") == 2
+
+
+def test_accept_score_stops_revising_early():
+    # critic not "supported" but score clears accept_score (0.8) -> stop, no revision.
+    final, _, llm = _run([_grade(True)], [_answer()], [_critic(False, score=0.85)], AgentConfig())
+    assert final["revision_round"] == 0
+    assert llm.calls.count("CitedAnswer") == 1  # no churn
+    assert final["guardrail"]["action"] == "answer"
+
+
+def test_keep_best_returns_strongest_draft_not_last():
+    cite = [Citation(source_id="S1", arxiv_id="2003.10555", section="3 Method", page=4)]
+    strong = CitedAnswer(
+        answer="Strong first answer [S1].", citations=cite, insufficient_context=False
+    )
+    weak = CitedAnswer(
+        answer="Weaker revised answer [S1].", citations=cite, insufficient_context=False
+    )
+    # draft0 scores 0.6 (revise), revision draft1 scores worse (0.3) -> keep draft0.
+    final, _, _ = _run(
+        [_grade(True)], [strong, weak], [_critic(False, 0.6), _critic(False, 0.3)], AgentConfig()
+    )
+    assert final["answer"].answer == "Strong first answer [S1]."  # best kept, not the last
+    assert final["best_quality"] == 0.6

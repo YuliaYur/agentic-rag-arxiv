@@ -95,9 +95,13 @@ def initial_state(question: str, config: AgentConfig | None = None) -> dict:
         "answer": None,
         "revision_round": 0,
         "critic": None,
+        "best_validated": None,
+        "best_critic": None,
+        "best_quality": -1.0,
         "guardrail": None,
         "max_retrieval_rounds": cfg.max_retrieval_rounds,
         "max_revision_rounds": cfg.max_revision_rounds,
+        "accept_score": cfg.accept_score,
         "trace": [],
     }
 

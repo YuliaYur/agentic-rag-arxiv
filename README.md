@@ -79,9 +79,12 @@ START → retrieve → grade_context ─(ok | cap)→ generate → cite_critic �
 ```
 
 `grade_context` reformulates the query and loops to `retrieve` (≤3 rounds);
-`cite_critic` audits claim support and loops to `generate` (≤2 revisions). Each
-node appends structured metadata to a `trace`. Rationale + why it beats the
-baseline on multi-hop questions: [`DECISIONS.md`](DECISIONS.md) (ADR-0008).
+`cite_critic` audits claim support and loops to `generate` (≤2 revisions, stopping
+early once a quality threshold is met). The agent **keeps the best draft** across
+revisions (ties → earliest), so a revision can only improve the final answer, never
+degrade it — see [ADR-0012](DECISIONS.md). Each node appends structured metadata to
+a `trace`. Rationale + the baseline comparison: [`DECISIONS.md`](DECISIONS.md)
+(ADR-0008, ADR-0012).
 
 ```python
 from agentic_rag.agent import build_agent, run_agent

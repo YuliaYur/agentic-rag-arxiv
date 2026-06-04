@@ -20,14 +20,18 @@ GRADE_SYSTEM = """You judge whether the retrieved SOURCES are sufficient and rel
 - If sufficient, set refined_query to the original question."""
 
 CRITIC_SYSTEM = """You are a citation auditor. Given the QUESTION, a proposed ANSWER (with inline [S#]
-markers), and the numbered SOURCES, check whether EVERY factual claim in the answer is supported by
+markers), and the numbered SOURCES, check whether the factual claims in the answer are supported by
 the cited sources.
 
-- supported=true ONLY if every claim is backed by the content of a cited source.
-- List each unsupported or miscited claim in unsupported_claims.
+- A claim counts as SUPPORTED if it is stated in, or is a reasonable paraphrase or direct
+  inference from, a cited source. Do NOT require verbatim wording, and do not penalize correct
+  background phrasing that a cited source clearly implies.
+- Only flag a claim as unsupported if it is clearly absent from, or contradicted by, the cited
+  sources (a genuine hallucination or a miscitation) — not merely reworded.
+- supported=true if every factual claim meets the bar above.
 - score = fraction of claims that are supported (0.0-1.0).
-- feedback: concrete instructions to fix it (remove/soften the claim, or cite the right source).
-  Empty string if fully supported."""
+- List only genuinely unsupported/miscited claims in unsupported_claims.
+- feedback: concrete instructions to fix those specific claims. Empty string if fully supported."""
 
 
 def build_grade_prompt(question: str, chunks: list[RetrievedChunk]) -> str:
@@ -44,8 +48,10 @@ def revision_note(critic: dict) -> str:
     """A revision instruction appended to the generate prompt on a re-try."""
     claims = "; ".join(critic.get("unsupported_claims", [])) or "(see feedback)"
     return (
-        "\n\nREVISION REQUIRED — a citation audit found unsupported claims: "
+        "\n\nREVISION REQUIRED — a citation audit flagged these unsupported claims: "
         f"{claims}. Feedback: {critic.get('feedback', '')}. "
-        "Revise so every claim is supported by a cited source, or remove it. "
+        "Make the MINIMAL change: only fix the flagged claims — remove them, soften them, or add "
+        "the correct [S#] citation. Do NOT introduce any new claims, and do NOT reword sentences "
+        "that were already supported; keep the rest of the answer identical. "
         "If the sources truly don't support an answer, set insufficient_context=true."
     )

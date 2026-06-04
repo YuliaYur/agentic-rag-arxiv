@@ -61,10 +61,32 @@ class _Similarities(BaseModel):
 # --- shared primitives ------------------------------------------------------
 
 
+# A refusal/abstention makes no factual claim about the subject, so it cannot be
+# unfaithful. Without this guard the extractor turns "I don't have enough
+# information ..." into a phantom statement that then scores as unsupported,
+# unfairly punishing honest abstention (an eval bug, not a model failing).
+_REFUSAL_MARKERS = (
+    "don't have enough",
+    "do not have enough",
+    "not enough information",
+    "insufficient context",
+    "no relevant sources",
+    "cannot answer",
+    "can't answer",
+)
+
+
+def _is_refusal(text: str) -> bool:
+    t = text.lower()
+    return any(m in t for m in _REFUSAL_MARKERS)
+
+
 def _extract_statements(llm, text: str) -> list[str]:
     system = (
-        "Break the TEXT into a list of atomic, self-contained factual statements. "
-        "Each should stand alone (resolve pronouns). Ignore filler and citation markers like [S1]."
+        "Break the TEXT into a list of atomic, self-contained factual statements about the "
+        "subject matter. Each should stand alone (resolve pronouns). Ignore filler, citation "
+        "markers like [S1], and meta-statements about the answer itself or its uncertainty "
+        "(e.g. 'I don't have enough information')."
     )
     return llm.structured(system, f"TEXT:\n{text}", _Statements).statements
 
@@ -88,10 +110,14 @@ def _verify(llm, statements: list[str], context: str) -> float:
 # --- the four metrics -------------------------------------------------------
 
 
-def faithfulness(llm, answer: str, contexts: list[str]) -> float:
-    if not contexts:
-        return 0.0
+def faithfulness(llm, answer: str, contexts: list[str]) -> float | None:
+    """Returns None when not applicable (no context, or an honest refusal with no
+    claims) so the aggregate skips it rather than scoring it 0."""
+    if not contexts or _is_refusal(answer):
+        return None
     statements = _extract_statements(llm, answer)
+    if not statements:
+        return None
     return _verify(llm, statements, "\n\n".join(contexts))
 
 

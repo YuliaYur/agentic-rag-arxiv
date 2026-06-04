@@ -80,11 +80,11 @@ def aggregate(per_question: list[dict], system_names: list[str]) -> dict:
         agg[name] = {}
         for key in METRIC_KEYS:
             vals = [
-                q["systems"][name]["scores"][key]
+                v
                 for q in per_question
-                if name in q["systems"]
-                and "scores" in q["systems"][name]
-                and key in q["systems"][name]["scores"]
+                if "scores" in q["systems"].get(name, {})
+                for v in [q["systems"][name]["scores"].get(key)]
+                if isinstance(v, (int, float))  # skip None / not-applicable
             ]
             agg[name][key] = mean(vals) if vals else None
         errs = sum(1 for q in per_question if q["systems"].get(name, {}).get("error"))

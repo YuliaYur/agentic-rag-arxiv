@@ -68,14 +68,20 @@ class AgentState(TypedDict, total=False):
     revision_round: int
 
     # Critique
-    critic: dict[str, Any] | None  # CriticResult.model_dump()
+    critic: dict[str, Any] | None  # CriticResult.model_dump() of the LATEST draft
+
+    # Best-draft-so-far (keep-best: revisions can only improve the final answer)
+    best_validated: ValidatedAnswer | None  # the best answer seen across revisions
+    best_critic: dict[str, Any] | None  # its CriticResult.model_dump()
+    best_quality: float  # ranking score of best_validated (higher = better)
 
     # Guardrails (output layer's verdict; input-layer hits live in the trace)
     guardrail: dict[str, Any] | None  # GuardrailDecision.model_dump()
 
-    # Caps (kept in state so routing functions stay pure)
+    # Caps + stopping (kept in state so routing functions stay pure)
     max_retrieval_rounds: int
     max_revision_rounds: int
+    accept_score: float
 
     # Ordered, structured per-node metadata for tracing (Step 6).
     trace: Annotated[list[dict[str, Any]], operator.add]

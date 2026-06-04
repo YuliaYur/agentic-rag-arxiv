@@ -17,6 +17,7 @@ extend, and may supersede, older ones.
 | 0009 | Guardrails — injection neutralization (input) + abstain/confidence gate (output) | Accepted |
 | 0010 | Observability — self-hosted Langfuse tracing, toggleable, fail-safe | Accepted |
 | 0011 | Evaluation harness — golden set + native RAGAS-style metrics + LLM-judge | Accepted |
+| 0012 | Agent robustness — keep-best draft, acceptance threshold, minimal-edit revisions | Accepted |
 
 ---
 
@@ -539,3 +540,56 @@ only add cost — exactly the hypothesis the expanded, curated set must test. Th
 harness deliberately makes that measurable instead of assumed. Limitation: LLM-scored
 metrics are noisy and model-dependent — read them as relative signals, gate CI on
 the vetted subset, and treat per-question inspection as part of the workflow.
+
+---
+
+## ADR-0012 — Agent robustness: keep-best draft, acceptance threshold, minimal-edit revisions
+
+**Status:** Accepted (2026-06-04)
+
+**Context.** The first eval run (ADR-0011) showed the agent *behind* the baseline.
+Per-question diagnosis pinned the cause squarely on the **revision loop**, not
+retrieval: on every question the cite-critic returned `supported=false`
+(score ≈0.83, "1 unsupported claim") and never converged, so the loop ran to its
+cap (`revision=2`) every time — and the rewrites sometimes **degraded** a good
+first draft (e.g. misrepresenting FlashAttention, or adding an unsupported
+comparison that dropped faithfulness 1.00→0.73). Since retrieval was *identical*
+to the baseline on 5/6 questions, the agent was strictly the baseline's first
+draft plus two chances to make it worse.
+
+**Decision.** Four changes make the loop monotonic and convergent:
+
+1. **Keep-best draft.** The agent tracks the best answer across revisions and
+   returns it (the `output_guard` promotes it to the final answer), with ties
+   broken toward the *earliest* draft. A revision is adopted only if it *strictly*
+   improves a quality rank (ungrounded < honest refusal < grounded answer by
+   critic score). So revisions are pure upside — the final answer can never be
+   worse than the first draft (≈ the baseline). This is the load-bearing fix.
+2. **Acceptance threshold** (`AgentConfig.accept_score`, default 0.8). Stop
+   revising once the critic's supported-claim fraction clears the bar, even if not
+   every claim passed — no more churning a "good enough" answer. Routing stays a
+   pure function of state (`accept_score` lives in the state).
+3. **Minimal-edit revision prompt.** A revision may only fix the flagged claims
+   (remove / soften / re-cite) and must not introduce new claims or reword
+   already-supported sentences — closing the door on revision-introduced drift.
+4. **Calibrated critic prompt.** Count reasonable paraphrases / direct inferences
+   as supported; only flag genuine hallucinations or miscitations. This stops the
+   chronic false-dissatisfaction that drove pointless revisions.
+
+Alongside, an **eval fairness fix** (the user's observation): a refusal makes no
+factual claim, so faithfulness now excludes it (`None`, skipped in the aggregate)
+instead of turning "I don't have enough information" into a phantom unsupported
+statement scored ~0.
+
+**Consequences.** After the fixes the agent **wins the headline LLM-judge metric**
+(0.875 vs 0.792 on the seed set) and answer relevancy, ties retrieval/context
+precision, and stops degrading — most questions now accept the first draft, so the
+agent also makes **far fewer LLM calls** (cheaper + faster) than before. It still
+trails slightly on faithfulness/context-recall, driven almost entirely by one
+retrieval-miss question (q-0006) where the model leaks prior knowledge into a
+miscited answer (faithfulness rightly 0) — on the 5 questions where retrieval
+works, the agent's faithfulness *exceeds* the baseline. The keep-best machinery is
+the durable robustness gain; the remaining gap is a **retrieval** problem (the next
+lever), not a loop problem. Caveat: results are from one run on 6 questions and
+q-0006 is unstable across runs — conclusions firm up after the golden set is
+curated and expanded.

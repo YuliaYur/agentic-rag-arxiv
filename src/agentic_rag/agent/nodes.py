@@ -117,19 +117,37 @@ class AgentNodes:
             build_critic_prompt(state["original_question"], state["validated"], state["chunks"]),
             CriticResult,
         )
-        entry = {
-            "node": "cite_critic",
-            "revision_round": state.get("revision_round", 0),
-            "supported": critic.supported,
-            "critic_score": critic.score,
-            "n_unsupported": len(critic.unsupported_claims),
-        }
-        return {"critic": critic.model_dump(), "trace": [entry]}
+        # Keep-best: rank this draft and adopt it only if it STRICTLY beats the best
+        # so far (ties keep the earlier draft). This makes revisions pure upside —
+        # the final answer can never be worse than the first draft.
+        quality = _draft_quality(state["validated"], critic)
+        updates: dict = {"critic": critic.model_dump()}
+        if quality > state.get("best_quality", -1.0):
+            updates["best_validated"] = state["validated"]
+            updates["best_critic"] = critic.model_dump()
+            updates["best_quality"] = quality
+            became_best = True
+        else:
+            became_best = False
+        updates["trace"] = [
+            {
+                "node": "cite_critic",
+                "revision_round": state.get("revision_round", 0),
+                "supported": critic.supported,
+                "critic_score": critic.score,
+                "n_unsupported": len(critic.unsupported_claims),
+                "draft_quality": quality,
+                "became_best": became_best,
+            }
+        ]
+        return updates
 
     # 5. output_guard ---------------------------------------------------------
     def output_guard(self, state: dict) -> dict:
-        """Final gate: structure + abstain + grounding/confidence -> answer | decline."""
-        decision = self._guards.check_output(state.get("answer"), state.get("critic"))
+        """Final gate over the BEST draft: structure + abstain + grounding/confidence."""
+        best = state.get("best_validated") or state.get("answer")
+        best_critic = state.get("best_critic") or state.get("critic")
+        decision = self._guards.check_output(best, best_critic)
         entry = {
             "node": "output_guard",
             "action": decision.action,
@@ -137,7 +155,27 @@ class AgentNodes:
             "confidence": decision.confidence,
             "failed_checks": [c.name for c in decision.checks if not c.passed],
         }
-        return {"guardrail": decision.model_dump(), "trace": [entry]}
+        # Promote the best draft to the final answer (it may not be the last one).
+        return {"guardrail": decision.model_dump(), "answer": best, "trace": [entry]}
+
+
+# --- keep-best ranking -------------------------------------------------------
+
+
+def _draft_quality(validated, critic) -> float:
+    """Rank a draft so keep-best can pick the strongest answer seen.
+
+    Order (worst to best): ungrounded (fabricated citations) < honest refusal <
+    a real grounded answer scored by the critic's supported-claim fraction. So a
+    grounded answer always beats a refusal, and a refusal always beats fabrication.
+    """
+    if validated is None:
+        return -1.0
+    if not validated.is_grounded:
+        return 0.0
+    if validated.insufficient_context:
+        return 0.1
+    return float(getattr(critic, "score", 0.0))
 
 
 # --- routing (pure) ----------------------------------------------------------
@@ -154,8 +192,18 @@ def route_after_grade(state: dict) -> str:
 
 
 def route_after_critic(state: dict) -> str:
-    """Revise if the answer isn't fully supported and we have revisions left; else finish."""
+    """Revise only if the answer is below the acceptance bar and revisions remain.
+
+    Stop (go to output_guard) when the critic is fully satisfied, OR the
+    supported-claim fraction already clears ``accept_score`` ("good enough", so we
+    don't churn), OR we've hit the revision cap.
+    """
     critic = state.get("critic") or {}
-    if critic.get("supported") or state.get("revision_round", 0) >= state["max_revision_rounds"]:
+    accept = state.get("accept_score", 1.0)
+    if (
+        critic.get("supported")
+        or critic.get("score", 0.0) >= accept
+        or state.get("revision_round", 0) >= state["max_revision_rounds"]
+    ):
         return "end"
     return "generate"

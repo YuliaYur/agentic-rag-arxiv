@@ -112,8 +112,30 @@ def test_faithfulness_supported_fraction():
     assert faithfulness(_metric_llm(), "ans", ["ctx"]) == 0.5
 
 
-def test_faithfulness_zero_without_context():
-    assert faithfulness(_metric_llm(), "ans", []) == 0.0
+def test_faithfulness_none_without_context():
+    assert faithfulness(_metric_llm(), "ans", []) is None
+
+
+def test_faithfulness_none_for_refusal_without_calling_llm():
+    # A refusal makes no factual claim -> not applicable; must short-circuit (no LLM).
+    class Boom:
+        def structured(self, *a, **k):
+            raise AssertionError("LLM should not be called for a refusal")
+
+    val = faithfulness(Boom(), "I don't have enough information in the provided sources.", ["ctx"])
+    assert val is None
+
+
+def test_aggregate_skips_none_metric():
+    from agentic_rag.eval.runner import aggregate
+
+    pq = [
+        {"systems": {"baseline": {"scores": {"faithfulness": None, "mrr": 1.0}}}},
+        {"systems": {"baseline": {"scores": {"faithfulness": 0.5, "mrr": 0.5}}}},
+    ]
+    agg = aggregate(pq, ["baseline"])
+    assert agg["baseline"]["faithfulness"] == 0.5  # the None row is skipped
+    assert agg["baseline"]["mrr"] == 0.75
 
 
 def test_context_recall_supported_fraction():

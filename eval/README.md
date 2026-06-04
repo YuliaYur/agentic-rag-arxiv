@@ -120,14 +120,36 @@ rubric penalizes refusing when the reference shows the answer was attainable). T
 the aggregate, and a candidate rubric refinement (should faithful abstention on a
 retrieval miss really score 1?).
 
-## Why the agent doesn't obviously win (yet)
+## Agent vs baseline — what the fixes changed
 
-The agent's edge is supposed to show on **multi-hop** questions where one retrieval
-misses a paper. If recall is tied (both systems miss the same second paper), the
-agent's grade/re-retrieve loop can't help, and its extra steps only add latency,
-cost, and chances for the critic to force an over-cautious abstention. The eval is
-doing its job by making this visible and measurable rather than assumed — curate
-the multi-hop questions and expand the set to test the hypothesis properly.
+The *first* run (see git history) had the **baseline ahead**: the agent's revision
+loop ran to its cap on every question and often *degraded* the first draft (e.g.
+misrepresenting a method), while the critic was never satisfied. Diagnosing that
+from the per-question results drove four robustness fixes (ADR-0012):
+
+- **keep-best draft** — the agent returns the strongest answer across revisions
+  (ties keep the earliest), so a revision can only help, never hurt;
+- **acceptance threshold** — stop revising once the critic clears `accept_score`,
+  so it doesn't churn a "good enough" answer (also far fewer LLM calls);
+- **minimal-edit revisions** — a revision may only fix the flagged claim, not
+  reword supported text or add new claims;
+- **calibrated critic** — count reasonable paraphrases/inferences as supported.
+
+After these, the agent **wins the headline judge metric** and answer relevancy and
+no longer degrades (most questions now stop at the first draft). The remaining
+gaps are instructive, not failures:
+
+- **Faithfulness/context-recall still trail slightly** — driven almost entirely by
+  one question (q-0006) where retrieval misses the source paper and the model
+  *leaks prior knowledge* (a correct-but-miscited answer the faithfulness metric
+  rightly scores 0). On the 5 questions where retrieval works, the agent's
+  faithfulness actually **exceeds** the baseline.
+- **q-0006 is retrieval-bound and unstable** — across runs the agent either
+  abstains honestly (judge low) or leaks a lucky-correct answer (faithfulness 0).
+  The real fix is retrieval, not the loop — the next lever to pull.
+
+The lesson: read per-question, not just aggregates; the agent's edge is grounding
+and not-degrading, and the eval now measures it.
 
 ## Planned next
 
