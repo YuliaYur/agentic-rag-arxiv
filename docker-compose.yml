@@ -1,7 +1,14 @@
-# Local Qdrant for the RAG vector index.
-#   docker compose up -d        # start (data persists in ./data/qdrant)
+# Local infra for the RAG stack.
+#   docker compose up -d        # start Qdrant + Langfuse (data persists in ./data)
 #   docker compose down         # stop
-# Dashboard: http://localhost:6333/dashboard
+#
+# Qdrant dashboard:  http://localhost:6333/dashboard
+# Langfuse UI:       http://localhost:3000   (login: dev@local / localdevpassword)
+#
+# Langfuse is the self-hosted v2 stack (one server + Postgres) — light enough to run
+# locally. A project and API keys are auto-provisioned on first boot via the
+# LANGFUSE_INIT_* vars below, so the keys in .env.example work out of the box.
+# These are LOCAL-DEV credentials — rotate them for any non-local use.
 services:
   qdrant:
     image: qdrant/qdrant:v1.12.4
@@ -11,4 +18,47 @@ services:
       - "6334:6334"   # gRPC
     volumes:
       - ./data/qdrant:/qdrant/storage
+    restart: unless-stopped
+
+  langfuse-db:
+    image: postgres:16
+    container_name: agentic-rag-langfuse-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: langfuse
+    volumes:
+      - ./data/langfuse-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: agentic-rag-langfuse
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@langfuse-db:5432/langfuse
+      NEXTAUTH_URL: http://localhost:3000
+      # Local-dev secrets — do NOT use these values anywhere real.
+      NEXTAUTH_SECRET: local-dev-not-a-secret-change-me
+      SALT: local-dev-salt-change-me
+      ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_INIT_ORG_ID: local
+      LANGFUSE_INIT_ORG_NAME: Local
+      LANGFUSE_INIT_PROJECT_ID: agentic-rag
+      LANGFUSE_INIT_PROJECT_NAME: agentic-rag-arxiv
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-local-dev
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-local-dev
+      LANGFUSE_INIT_USER_EMAIL: dev@local
+      LANGFUSE_INIT_USER_NAME: dev
+      LANGFUSE_INIT_USER_PASSWORD: localdevpassword
     restart: unless-stopped

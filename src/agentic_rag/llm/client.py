@@ -67,4 +67,30 @@ class LLMClient:
             raise LLMRefusal(message.refusal)
         if message.parsed is None:
             raise LLMError("model returned no parsed structured output")
+
+        # Record the call for tracing: token usage lets Langfuse compute cost from
+        # its model price list. No-op (and no import cost) when tracing is disabled.
+        self._trace_generation(schema.__name__, messages, message.parsed, completion)
         return message.parsed
+
+    def _trace_generation(self, name: str, messages: list, parsed: T, completion) -> None:
+        from agentic_rag.observability import get_tracer
+
+        usage = getattr(completion, "usage", None)
+        usage_details = (
+            {
+                "input": usage.prompt_tokens,
+                "output": usage.completion_tokens,
+                "total": usage.total_tokens,
+                "unit": "TOKENS",
+            }
+            if usage is not None
+            else None
+        )
+        get_tracer().generation(
+            name=name,
+            model=self.config.model,
+            input=messages,
+            output=parsed.model_dump(),
+            usage=usage_details,
+        )

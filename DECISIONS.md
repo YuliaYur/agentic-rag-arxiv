@@ -15,6 +15,7 @@ extend, and may supersede, older ones.
 | 0007 | Single-shot RAG baseline — structured, grounded, cited answers | Accepted |
 | 0008 | Agentic answer graph (LangGraph) — grade + cite-critic loops | Accepted |
 | 0009 | Guardrails — injection neutralization (input) + abstain/confidence gate (output) | Accepted |
+| 0010 | Observability — self-hosted Langfuse tracing, toggleable, fail-safe | Accepted |
 
 ---
 
@@ -399,3 +400,75 @@ legitimate sentence that *quotes* an instruction (mitigated by conservative
 patterns and the flag-only mode). The threshold trades coverage for precision —
 it will (correctly) decline some borderline answers, which the eval suite (Step 7)
 will quantify.
+
+---
+
+## ADR-0010 — Observability: self-hosted Langfuse tracing, toggleable and fail-safe
+
+**Status:** Accepted (2026-06-04)
+
+**Context.** The agent makes several LLM calls per question across a branching,
+looping graph. Without a trace you can't see *why* a run was slow, expensive, or
+wrong — you only see the final answer. We want per-run visibility: what each node
+did, how many times the loops ran, token usage and cost, and latency — using a
+**free, self-hostable** tool (the project's standing constraint).
+
+**Decision.** Self-hosted **Langfuse** as the trace backend, with a thin in-repo
+tracing facade (`src/agentic_rag/observability/`).
+
+- **Langfuse v2 (server + Postgres), not v3.** v3 self-host needs ~6 services
+  (ClickHouse, Redis, MinIO, web, worker, db); v2 is **one server + one Postgres**
+  — far lighter for a single-user local box, and enough for our volume. Added to
+  `docker-compose.yml` with `LANGFUSE_INIT_*` so an org/project/user and **API keys
+  are auto-provisioned on first boot** (the dev keys in `.env.example` work
+  immediately — local-only, clearly marked to rotate).
+- **A facade with two implementations.** `NoOpTracer` (default; no Langfuse import,
+  no network) and `LangfuseTracer`. `build_tracer()` picks based on
+  `TracingConfig.from_env()`. A process-global `get_tracer()` is the shared
+  instance; `configure_tracer()` injects a fake in tests.
+- **Toggleable via env** (`LANGFUSE_TRACING` + keys), overridable by the CLI
+  (`--trace` / `--no-trace`). Off by default, so tests and offline runs never touch
+  Langfuse.
+- **Trace shape:** one **trace** per `run_agent` call → one **span** per graph node
+  (carrying that node's existing structured metadata — `retrieval_round`, `grade`,
+  `critic_score`, guardrail action, injection hits) → one **generation** per LLM
+  call, tagged with token usage so **Langfuse computes cost** from its model price
+  list. Span timing gives latency for free.
+
+**Design choices.**
+- **Instrumentation lives in a `_traced()` node wrapper in `graph.py`, not in the
+  nodes.** Each node already returns a structured `trace` entry; the wrapper reuses
+  it verbatim as the span's metadata. So `nodes.py` has *zero* tracing code, and
+  what's traced stays obvious in one place.
+- **A manual parent stack** in `LangfuseTracer` (push on span enter, pop on exit;
+  generations attach to the top) reproduces run→node→LLM nesting. This works
+  because the graph runs nodes sequentially in one thread, and it keeps the
+  `LLMClient` decoupled — it just calls `get_tracer().generation(...)` and the call
+  lands under whatever node span is active.
+- **Tracing must never break the app.** Every Langfuse operation is wrapped; on any
+  failure (server down, bad keys, SDK drift) it logs once and degrades to
+  no-tracing. Observability is not allowed to take down a request.
+
+**What to look for in a trace** (the diagnostic payoff):
+- **(a) Bad retrieval** — open the `retrieve` span: are the `top_sources` on-topic?
+  Then the `grade_context` span: `sufficient=false` with a `refined_query` and a
+  *second* `retrieve` span means the grader caught weak context and re-queried.
+  Persistent `sufficient=false` to the cap, or off-topic sources each round, points
+  at the index/query, not the LLM.
+- **(b) Loop running too many times** — the trace tree shows repeats directly:
+  multiple `retrieve`/`grade_context` pairs (retrieval loop) or multiple
+  `generate`/`cite_critic` pairs (revision loop). Trace-level metadata
+  `retrieval_rounds` / `revision_rounds` at/near the caps (3 / 2) means it's
+  thrashing — usually a never-satisfied grader or a critic that keeps finding
+  unsupported claims. The per-node metadata tells you which.
+- **(c) Cost spikes** — each generation shows tokens + cost; the trace totals them.
+  A spike is almost always *more generations* (loops, see (b)) or a *fat prompt*
+  (large `k` or long chunks inflating input tokens on every call). Sort traces by
+  cost in the UI; open the priciest; the dominant generation's input-token count
+  tells you which lever (fewer loops vs. smaller context) to pull.
+
+**Consequences.** Full per-run visibility for free and self-hosted, with near-zero
+overhead when disabled. Costs: an extra (optional) two-container stack to run
+locally, and we're pinned to Langfuse **v2** — if we later need v3 features
+(multi-modal, evals UI) the compose + SDK pin must be revisited. The facade keeps
+that blast radius to one module.

@@ -24,8 +24,8 @@ pre-commit install               # ruff lint+format on commit
 # 1. fetch the corpus into data/raw/ (skips files already present)
 python scripts/fetch_corpus.py
 
-# 2. start the local vector DB
-docker compose up -d             # Qdrant on localhost:6333 (dashboard at /dashboard)
+# 2. start local infra (Qdrant + Langfuse)
+docker compose up -d             # Qdrant :6333 (dashboard at /dashboard), Langfuse :3000
 
 # 3. ingest: parse → chunk → embed → index (idempotent, re-runnable)
 rag-ingest                       # or: python -m agentic_rag.ingest.cli
@@ -41,6 +41,9 @@ python scripts/ask.py "How does ELECTRA's objective differ from BERT's?"
 
 # 6. agentic answer graph: grade + re-retrieve + cite-critic loops (paid; a few calls)
 python scripts/agent_ask.py "How does ELECTRA's objective differ from BERT and RoBERTa?"
+
+# (optional) trace the run in Langfuse — see the Observability section below
+python scripts/agent_ask.py "How does ELECTRA differ from BERT?" --trace
 ```
 
 ## Answering (single-shot baseline)
@@ -111,6 +114,45 @@ validator and cite critic); rationale + the RAG threat model in
 
 Behaviour is tunable via `GuardrailsConfig` / CLI flags
 (`--min-confidence`, `--no-scan-injection`, `--flag-only-injection`).
+
+## Observability (Langfuse)
+
+Optional, self-hosted [Langfuse](https://langfuse.com) tracing of every agent run —
+**off by default**, fail-safe (a tracing error never breaks a request). Rationale +
+what to look for in a trace: [`DECISIONS.md`](DECISIONS.md) (ADR-0010).
+
+```bash
+docker compose up -d        # starts Langfuse v2 at http://localhost:3000
+                            # (a project + dev API keys are auto-provisioned)
+```
+
+Enable tracing with `LANGFUSE_TRACING=true` (+ keys) in `.env` — the dev keys match
+the compose defaults, so it works out of the box — or per-run with `--trace`:
+
+```bash
+python scripts/agent_ask.py "How does ELECTRA differ from BERT?" --trace
+# ... prints: Langfuse trace: http://localhost:3000/...
+```
+
+**Open the UI:** browse to `http://localhost:3000`, log in with `dev@local` /
+`localdevpassword`, open the **agentic-rag-arxiv** project → **Tracing → Traces**,
+and click the latest `agent-run` (or follow the URL the CLI prints).
+
+**Reading one trace.** The run is a tree: `agent-run` → one span per node
+(`retrieve`, `grade_context`, `generate`, `cite_critic`, `output_guard`) → one
+*generation* per LLM call (with token counts + computed cost). Each span carries
+that node's metadata. Quick diagnostics:
+
+- **bad retrieval** → check the `retrieve` span's `top_sources` and whether
+  `grade_context` had to re-query (`sufficient=false` + a second `retrieve`);
+- **loop running too often** → repeated `retrieve`/`grade` or `generate`/`critic`
+  pairs, or `retrieval_rounds`/`revision_rounds` near the caps (3 / 2);
+- **cost spikes** → the trace's total cost; a spike is usually *more generations*
+  (loops) or a *fatter prompt* (large `k` / long chunks inflating input tokens).
+
+Tracing is a thin facade (`agentic_rag.observability`): a `NoOpTracer` when off, a
+`LangfuseTracer` when on, selected from env — so the default path imports nothing
+from Langfuse.
 
 ## Retrieval
 
@@ -190,11 +232,12 @@ src/agentic_rag/llm/        # thin LLM client (LiteLLM-routable)
 src/agentic_rag/answer/     # single-shot RAG baseline (schemas, prompt, validate)
 src/agentic_rag/agent/      # LangGraph agent (state, nodes, routing, graph)
 src/agentic_rag/guardrails/ # injection neutralization (input) + abstain/confidence gate (output)
+src/agentic_rag/observability/ # optional Langfuse tracing (NoOp when disabled)
 scripts/
   fetch_corpus.py    # reproducible corpus download
   inspect_index.py   # index stats + sample query
   search.py          # hybrid retrieval from the CLI
   ask.py             # single-shot RAG baseline (cited answer)
   agent_ask.py       # agentic answer graph + guardrails (with control-flow trace)
-tests/               # offline unit tests (chunking, metadata, fusion, bm25, retriever, answer, agent, guardrails)
+tests/               # offline unit tests (chunking, metadata, fusion, bm25, retriever, answer, agent, guardrails, observability)
 ```

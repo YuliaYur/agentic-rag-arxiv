@@ -8,5 +8,6 @@ openai>=1.40               # LLM client for the single-shot RAG baseline
 pydantic>=2.7              # structured LLM output (answer + citations)
 python-dotenv>=1.0         # load API keys from .env
 langgraph>=0.2             # agentic answer graph (retrieve/grade/generate/critic loop)
+langfuse>=2.0,<3.0         # self-hosted observability/tracing of the agent graph
 tqdm>=4.66                  # progress bars
 pytest>=8.0                 # tests (chunking + metadata logic)

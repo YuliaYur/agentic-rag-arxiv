@@ -69,13 +69,27 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="detect+log injection but don't redact (pass chunk text through)",
     )
+    trace_grp = p.add_mutually_exclusive_group()
+    trace_grp.add_argument(
+        "--trace", action="store_true", help="force Langfuse tracing on (overrides env)"
+    )
+    trace_grp.add_argument(
+        "--no-trace", action="store_true", help="force Langfuse tracing off (overrides env)"
+    )
     args = p.parse_args(argv)
+
+    import os
 
     from dotenv import load_dotenv
 
     from agentic_rag.ingest.config import REPO_ROOT
 
     load_dotenv(REPO_ROOT / ".env", override=True)
+    # CLI flag overrides the env toggle; read lazily by the global tracer below.
+    if args.trace:
+        os.environ["LANGFUSE_TRACING"] = "true"
+    elif args.no_trace:
+        os.environ["LANGFUSE_TRACING"] = "false"
 
     from agentic_rag.agent.config import AgentConfig
     from agentic_rag.agent.graph import build_agent, run_agent
@@ -113,6 +127,13 @@ def main(argv: list[str] | None = None) -> int:
         f"retrieval_rounds={final['retrieval_round']}  revisions={final['revision_round']}  "
         f"grounded={ans.is_grounded}]"
     )
+
+    from agentic_rag.observability import get_tracer
+
+    tracer = get_tracer()
+    if tracer.enabled:
+        url = tracer.last_trace_url
+        print(f"\nLangfuse trace: {url}" if url else "\nLangfuse trace recorded (open the UI).")
     return 0 if decision.get("action") == "answer" else 1
 
 
