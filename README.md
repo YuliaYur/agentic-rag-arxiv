@@ -5,38 +5,8 @@
 > **regression-gated in CI**, cost-routed + cached through LiteLLM, and runnable with
 > one `docker compose up`.
 
-<!-- Rendered natively by GitHub. Prefer a designed image? Drop it at docs/architecture.png
-     and swap this block for: ![Architecture](docs/architecture.png) -->
-
-```mermaid
-flowchart TB
-    U([User]) --> UI[Streamlit UI]
-    UI -->|POST /query| API[FastAPI<br/>validate · rate-limit · errors]
-    API --> R
-
-    subgraph AG["Agent · LangGraph"]
-        direction TB
-        R[retrieve<br/>dense + BM25 → RRF → cross-encoder] --> G{grade<br/>context}
-        G -- named paper missing --> R
-        G -- sufficient --> GEN[generate<br/>structured cited answer]
-        GEN --> CR{cite-critic<br/>claims supported?}
-        CR -- unsupported --> GEN
-        CR -- supported --> OG[output guard<br/>cite-or-abstain + confidence]
-    end
-
-    Q[(Qdrant<br/>vector index)] --> R
-    OG --> ANS([Cited answer · or safe decline]) --> UI
-
-    AG -. all LLM calls .-> LL[[LiteLLM<br/>per-role routing + cache]]
-    LL --- RD[(Redis<br/>semantic cache)]
-    AG -. traces · cost · p50/p95 .-> LF[[Langfuse]]
-    AG -. scored by .-> GATE{{CI eval gate<br/>fails the PR on regression}}
-
-    subgraph OFF["Ingestion · offline, idempotent"]
-        direction LR
-        P[20 arXiv PDFs] --> CH[parse + section-aware chunk] --> EM[embed · bge-small] --> Q
-    end
-```
+<!-- Architecture diagram — drop your image at docs/architecture.png -->
+![Architecture](docs/architecture.png)
 
 **🎥 90-second demo:** _add video link_ · Corpus: [`SOURCES.md`](SOURCES.md) · Design log: [`DECISIONS.md`](DECISIONS.md)
 
