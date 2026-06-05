@@ -223,6 +223,49 @@ under [`eval/results/`](eval/results/).
 > questions. The 24 `draft` reference answers are machine-generated and **await
 > expert curation** before their metrics should be trusted.
 
+## CI: gating on eval regression
+
+Every PR that touches `src/`, `eval/`, or `scripts/` runs the eval on the curated
+`seed` subset and **fails the build if the agent's metrics drop below committed
+floors** ([`eval/thresholds.json`](eval/thresholds.json)). The pass/fail table is
+posted as a PR comment and the job summary. Workflow:
+[`.github/workflows/eval-gate.yml`](.github/workflows/eval-gate.yml).
+
+Cost is bounded so it can run on every PR: a 6-question subset, agent-only (the
+shipped system), a cheap configurable judge model, and a **frozen index fixture**
+([`eval/fixtures/index.jsonl.gz`](eval/fixtures/)) loaded into a Qdrant service
+container — no corpus download, no PDF parsing, no ingest, no GPU. How to update
+the baseline intentionally: [`eval/README.md`](eval/README.md).
+
+### Why gate on eval regression
+
+Unit tests pin *code* behavior; they say nothing about whether the system still
+gives *good answers*. LLM quality is uniquely fragile — it drifts silently when you
+edit a prompt, bump a model, tweak retrieval, or a dependency shifts underneath you,
+and none of that raises an exception. Without a gate the only detector is a user
+noticing the answers got worse — in production, later.
+
+Gating deployment on eval regression turns "the answers feel fine" into an
+enforced, versioned contract:
+
+- **Quality becomes a build signal, not a vibe.** A faithfulness or recall drop
+  fails CI exactly like a broken test — caught in the PR, not in prod.
+- **The threshold file is a written definition of "good."**
+  `eval/thresholds.json` is reviewed, versioned, and changed only deliberately — so
+  "we improved" is a diff you can point to, not a claim.
+- **Safe iteration is fast iteration.** You can refactor the prompt or swap the
+  reranker aggressively because the gate catches the regression you didn't predict.
+  Confidence to change is the entire payoff.
+- **It forces honesty about trade-offs.** A change that lifts recall but tanks
+  faithfulness shows up as a red metric you must *consciously* accept (by moving a
+  floor, in the same PR) — not something that slips through unnoticed. (This repo
+  hit exactly that: a retrieval fix that quietly cratered faithfulness — see
+  [ADR-0014](DECISIONS.md). A gate makes that failure loud.)
+
+This is the line between shipping an LLM *demo* and operating an LLM *product*:
+demos are judged once, by their author; products regress continuously, under
+everyone's changes, and need a machine that says **no** before the regression ships.
+
 ## Tests & quality
 
 ```bash
@@ -267,6 +310,9 @@ scripts/
   ask.py             # single-shot RAG baseline (cited answer)
   agent_ask.py       # agentic answer graph + guardrails (with control-flow trace)
   eval_run.py        # run the eval suite (baseline vs agent) -> eval/results/
-eval/                # committed: golden_set.jsonl + results/ (versioned runs)
+  eval_gate.py       # CI gate: fail if metrics drop below eval/thresholds.json
+  export_index.py / load_index_fixture.py  # freeze/restore the index for CI
+eval/                # committed: golden_set.jsonl, thresholds.json, fixtures/, results/
+.github/workflows/   # eval-gate.yml: per-PR eval-regression gate
 tests/               # offline unit tests (chunking, fusion, bm25, retriever, answer, agent, guardrails, observability, eval)
 ```

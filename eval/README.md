@@ -151,8 +151,59 @@ gaps are instructive, not failures:
 The lesson: read per-question, not just aggregates; the agent's edge is grounding
 and not-degrading, and the eval now measures it.
 
+## CI gate
+
+Every PR that touches `src/`, `eval/`, or `scripts/` runs the eval and **fails the
+build if the agent regresses below the committed floors** in
+[`thresholds.json`](thresholds.json). The pass/fail table is posted as a PR comment
+and the job summary. Workflow: [`.github/workflows/eval-gate.yml`](../.github/workflows/eval-gate.yml);
+gate logic: [`scripts/eval_gate.py`](../scripts/eval_gate.py) (pure, unit-tested in
+`tests/test_eval_gate.py`). The *why* lives in the root README.
+
+**How cost is bounded** (so it can run on every PR for ~cents):
+
+- **Small subset** — the 6 vetted `seed` questions, not the full set.
+- **Agent-only** — gates the shipped system (`--systems agent`), halving LLM calls
+  vs running the baseline too.
+- **Cheap, swappable judge model** — `LLM_MODEL` sets the metric/judge model
+  (default `gpt-4o-mini`); drop it to a nano-class model for more savings.
+- **Frozen index fixture** — `fixtures/index.jsonl.gz` (the ~1,150 indexed chunks +
+  vectors, exported by [`scripts/export_index.py`](../scripts/export_index.py)) is
+  loaded into a Qdrant service container by
+  [`scripts/load_index_fixture.py`](../scripts/load_index_fixture.py). **No** arXiv
+  fetch, PDF parsing, ingest, or GPU in CI — deterministic and fast. Regenerate the
+  fixture (and commit it) after any `rag-ingest` change.
+- **Cached HF models + pip, CPU-only torch, `paths` filter, concurrency
+  cancel-in-progress.**
+- **Fork PRs** (no `OPENAI_API_KEY` secret) degrade to a **free retrieval-only
+  gate** (recall@k/MRR); the gate skips metrics it can't compute.
+
+> **Escalation if cost ever bites:** split into a *free retrieval-only gate on
+> every PR* + the *full RAGAS/judge gate on a nightly cron* (or label-triggered).
+> The gate logic already supports this — it just skips the LLM metrics when absent.
+
+The gate runs on `seed` today; flip `--status seed` → `reviewed` in the workflow
+once the drafts are curated.
+
+## Updating the baseline
+
+Thresholds are **floors, set below the last-good run** so normal LLM-judge noise
+doesn't flake the build (see the `_note` in `thresholds.json` for the exact
+derivation). When you *genuinely improve* a metric and want to lock the gain in:
+
+1. Re-run the gated subset: `python scripts/eval_run.py --status seed --systems agent`.
+2. Eyeball `eval/results/latest.md`; if it's a real, repeatable improvement,
+3. **raise the relevant floor in `thresholds.json` and commit the new
+   `eval/results/*` in the same PR**, so the reviewer sees the threshold bump next
+   to the evidence that justifies it.
+
+Never *lower* a floor just to turn a red build green. If a change legitimately
+trades one metric for another (e.g. recall up, context-precision down), lower that
+floor **deliberately, in the PR, with a one-line reason** — the diff is the audit
+trail. The thresholds file is the team's versioned definition of "good"; treat
+editing it like editing a test's expected value.
+
 ## Planned next
 
-- **CI gate:** fail the build if key metrics regress below thresholds (run on the
-  `reviewed` subset to keep CI cheap and deterministic-ish).
-- Expand to the full curated ~30+ set once the drafts are reviewed.
+- Expand to the full curated ~30+ set once the drafts are `reviewed`, and gate on
+  that larger subset.

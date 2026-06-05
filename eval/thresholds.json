@@ -1,0 +1,17 @@
+{
+  "subset": "seed",
+  "system": "agent",
+  "k": 5,
+  "model": "gpt-4o-mini",
+  "max_errors": 0,
+  "_note": "Floors = the last-good seed agent aggregates (eval/results/20260605-103605.json: recall 1.000, mrr 0.875, faithfulness 0.762, answer_relevancy 0.706, context_precision 0.650, context_recall 0.656, judge 0.958) MINUS a tolerance for LLM-judge run-to-run noise (~0.05 on retrieval, ~0.10-0.15 on the generated metrics). They catch a real regression without flaking on noise. Raise a floor ONLY in the same PR that genuinely improves it (commit the new eval/results/* alongside); never lower one to silence a red build without a justification. See eval/README.md > Updating the baseline.",
+  "metrics": {
+    "recall_at_k": 0.90,
+    "mrr": 0.75,
+    "faithfulness": 0.62,
+    "answer_relevancy": 0.58,
+    "context_precision": 0.50,
+    "context_recall": 0.50,
+    "judge_overall_norm": 0.80
+  }
+}

@@ -11,6 +11,9 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: ["--maxkb=1024"]   # PDFs/models are git-ignored; keep the repo lean
+        # The frozen CI index fixture is a deliberate ~3MB artifact (so CI needs no
+        # corpus/ingest); exempt it from the lean-repo guard.
+        exclude: ^eval/fixtures/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.15
