@@ -28,6 +28,21 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.6",
     "pre-commit>=3.7",
+    # so the endpoint tests run in CI (which installs .[dev]); streamlit is NOT here
+    "fastapi>=0.110",
+    "slowapi>=0.1.9",
+    "httpx>=0.27",
+]
+# FastAPI service: `pip install -e ".[serve]"; uvicorn agentic_rag.api.app:app`
+serve = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "slowapi>=0.1.9",
+]
+# Streamlit demo UI (heavier): `pip install -e ".[ui]"; streamlit run ui/streamlit_app.py`
+ui = [
+    "streamlit>=1.36",
+    "requests>=2.31",
 ]
 
 [project.scripts]
