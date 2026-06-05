@@ -8,6 +8,49 @@ cite.
 See [`SOURCES.md`](SOURCES.md) for the corpus and [`DECISIONS.md`](DECISIONS.md)
 for the design rationale (parser choice, chunking parameters, tuning guide).
 
+## Run locally (one command)
+
+The whole stack runs from a fresh clone with **Docker** — no Python setup, no corpus
+download, no manual ingestion (the index ships as a committed fixture and is loaded on
+startup):
+
+```bash
+cp .env.example .env          # then put your OPENAI_API_KEY in .env
+docker compose up --build     # builds the app image + brings up the core stack
+```
+
+Then open:
+- **UI** → http://localhost:8501 — ask a question, see the cited answer + the agent's steps
+- **API docs** → http://localhost:8000/docs — try `POST /query` interactively
+
+Add observability (Langfuse is heavier, so it's opt-in):
+
+```bash
+docker compose --profile observability up --build   # + Langfuse at http://localhost:3000
+```
+
+Stop with `docker compose down` (add `-v` to also drop the model-cache + named volumes).
+
+### Services
+
+| Service | Role | Port |
+|---|---|---|
+| `qdrant` | vector database — the retrieval index | 6333 |
+| `redis` | backend for the optional LLM **semantic cache** (`LLM_CACHE_ENABLED=true`) | 6379 |
+| `index-init` | one-shot — loads the committed index fixture (`eval/fixtures/index.jsonl.gz`, ~1,150 chunks) into Qdrant, then exits. **This is why retrieval works with no ingestion.** | — |
+| `api` | the **FastAPI** service wrapping the agent (`POST /query`, `GET /health`) | 8000 |
+| `ui` | the **Streamlit** demo (a thin HTTP client of the API) | 8501 |
+| `langfuse` + `langfuse-db` | **opt-in** tracing UI + its Postgres (`--profile observability`) | 3000 |
+
+**Startup order** is enforced via healthchecks + `depends_on`: `qdrant` → `index-init`
+(loads the index) → `api` (builds the agent once; the first boot downloads ~200 MB of
+embedder/reranker models into a cached volume, so allow ~1-2 min for it to go healthy)
+→ `ui`. The API reads `OPENAI_API_KEY` from your **`.env` file** (not an ambient shell
+variable), and inside the compose network services reach each other by **name**
+(`qdrant`, `redis`, `langfuse`) rather than `localhost`.
+
+For development without Docker (uv + local processes), see the Quickstart below.
+
 ## Pipeline
 
 ```

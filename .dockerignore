@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+# git-ignored local data (raw PDFs + Qdrant/Redis/Langfuse volumes) — never in the image
+data/
+# committed eval runs aren't needed at runtime (the fixture under eval/fixtures IS copied)
+eval/results/
+# secrets / local env never go into the image (compose passes env at run time)
+.env
+uv.lock
+tests/

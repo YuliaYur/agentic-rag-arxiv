@@ -33,6 +33,8 @@ def main(argv=None) -> int:
         print(f"fixture not found: {args.path}", file=sys.stderr)
         return 2
 
+    import time
+
     from qdrant_client import QdrantClient
 
     from agentic_rag.eval.fixture import load_fixture
@@ -41,6 +43,18 @@ def main(argv=None) -> int:
     cfg = QdrantConfig()
     collection = args.collection or cfg.collection
     client = QdrantClient(host=cfg.host, port=cfg.port, check_compatibility=False)
+
+    # Wait for Qdrant to accept connections (it may still be starting in compose).
+    for attempt in range(30):
+        try:
+            client.get_collections()
+            break
+        except Exception as exc:  # noqa: BLE001
+            if attempt == 29:
+                print(f"Qdrant not reachable at {cfg.host}:{cfg.port}: {exc}", file=sys.stderr)
+                return 1
+            time.sleep(2)
+
     n = load_fixture(client, args.path, collection)
     print(f"loaded {n} points into '{collection}'")
     return 0
