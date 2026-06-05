@@ -61,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     from agentic_rag.eval.runner import run_eval
     from agentic_rag.eval.systems import AgentSystem, BaselineSystem
     from agentic_rag.llm.client import LLMClient
+    from agentic_rag.llm.config import LLMConfig
     from agentic_rag.retrieve.retriever import build_retriever
 
     items = load_golden_set()
@@ -85,7 +86,10 @@ def main(argv: list[str] | None = None) -> int:
         app = build_graph(retriever, llm, cfg)
         systems["agent"] = AgentSystem(app, cfg)
 
-    metric_llm = LLMClient()  # separate client for metrics + judge
+    # Separate client for the RAGAS-style metrics + judge. Its model is swappable
+    # via the LLM_MODEL env var (the agent stays on its own default, so CI gates the
+    # real system while the judge model can be made cheaper) — a CI cost lever.
+    metric_llm = LLMClient(LLMConfig.from_env())
 
     def progress(i, total, qid):
         print(f"  [{i}/{total}] {qid}", flush=True)
