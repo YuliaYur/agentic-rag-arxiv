@@ -64,8 +64,13 @@ def _answer():
     )
 
 
-def _grade(sufficient, refined="better query"):
-    return GradeResult(sufficient=sufficient, reasoning="r", refined_query=refined)
+def _grade(sufficient, refined="better query", sub_queries=None):
+    return GradeResult(
+        sufficient=sufficient,
+        reasoning="r",
+        refined_query=refined,
+        sub_queries=sub_queries or [],
+    )
 
 
 def _critic(supported, score=None):
@@ -164,6 +169,121 @@ def test_retrieval_loop_then_sufficient():
     assert final["retrieval_round"] == 2
     # second retrieval used the reformulated query
     assert retriever.queries == ["How does ELECTRA differ from BERT?", "ELECTRA RTD vs BERT MLM"]
+
+
+def test_decomposed_reretrieval_covers_both_sides():
+    # Round 1 (single query) surfaces only ELECTRA; the grader judges it
+    # insufficient and emits per-side sub-queries. Round 2 must fan out over those
+    # sub-queries and the merged context must now cover BOTH papers.
+    electra = RetrievedChunk(
+        id="e",
+        text="ELECTRA uses replaced-token detection.",
+        arxiv_id="2003.10555",
+        title="ELECTRA",
+        slug="electra",
+        section="3",
+        page=4,
+        page_end=4,
+        chunk_index=0,
+    )
+    bert = RetrievedChunk(
+        id="b",
+        text="BERT uses masked language modeling.",
+        arxiv_id="1810.04805",
+        title="BERT",
+        slug="bert",
+        section="3",
+        page=4,
+        page_end=4,
+        chunk_index=0,
+    )
+
+    class SidedRetriever:
+        """Returns ELECTRA chunks unless the query mentions BERT (per-side fake)."""
+
+        def __init__(self):
+            self.queries = []
+
+        def retrieve(self, query, k):
+            self.queries.append(query)
+            return [bert] if "BERT" in query else [electra]
+
+    retriever = SidedRetriever()
+    llm = FakeLLM(
+        [_grade(False, sub_queries=["ELECTRA objective", "BERT objective"]), _grade(True)],
+        [_answer()],
+        [_critic(True)],
+    )
+    app = build_graph(retriever, llm, AgentConfig())
+    final = run_agent(app, "How does ELECTRA differ from BERT?", AgentConfig())
+
+    # Round 1 used the single original question; round 2 fanned out per side.
+    assert retriever.queries[0] == "How does ELECTRA differ from BERT?"
+    assert retriever.queries[1:] == ["ELECTRA objective", "BERT objective"]
+    # The merged round-2 context covers both papers (the multi-hop coverage fix).
+    papers = {c.arxiv_id for c in final["chunks"]}
+    assert papers == {"2003.10555", "1810.04805"}
+    # And the trace records the decomposition.
+    retrieve_entries = [e for e in final["trace"] if e["node"] == "retrieve"]
+    assert retrieve_entries[-1]["decomposed"] is True
+
+
+def test_deterministic_gate_forces_decomposition_when_llm_says_sufficient():
+    # The crux of ADR-0014: even when the LLM grader (wrongly) calls round-1
+    # context sufficient, the deterministic named-paper check must notice BERT is
+    # missing, force a decomposed re-retrieval, and lock coverage once both the
+    # named papers are present.
+    electra = RetrievedChunk(
+        id="e",
+        text="ELECTRA replaced-token detection.",
+        arxiv_id="2003.10555",
+        title="ELECTRA",
+        slug="electra",
+        section="3",
+        page=4,
+        page_end=4,
+        chunk_index=0,
+    )
+    bert = RetrievedChunk(
+        id="b",
+        text="BERT masked language modeling.",
+        arxiv_id="1810.04805",
+        title="BERT",
+        slug="bert",
+        section="3",
+        page=4,
+        page_end=4,
+        chunk_index=0,
+    )
+
+    class TitledRetriever:
+        """Has a corpus title map; returns BERT only for the BERT-title sub-query."""
+
+        _titles = {
+            "2003.10555": "ELECTRA: Pre-training Text Encoders as Discriminators",
+            "1810.04805": "BERT: Pre-training of Deep Bidirectional Transformers",
+        }
+
+        def __init__(self):
+            self.queries = []
+
+        @property
+        def titles(self):
+            return self._titles
+
+        def retrieve(self, query, k):
+            self.queries.append(query)
+            return [bert] if "bidirectional" in query.lower() else [electra]
+
+    retriever = TitledRetriever()
+    # LLM always says "sufficient" — the deterministic gate must override it.
+    llm = FakeLLM([_grade(True)], [_answer()], [_critic(True)])
+    app = build_graph(retriever, llm, AgentConfig())
+    final = run_agent(app, "How does ELECTRA differ from BERT?", AgentConfig())
+
+    assert final["retrieval_round"] == 2  # gate forced a second round despite "sufficient"
+    assert any(e["node"] == "retrieve" and e["decomposed"] for e in final["trace"])
+    assert {c.arxiv_id for c in final["chunks"]} == {"2003.10555", "1810.04805"}
 
 
 def test_retrieval_round_cap():

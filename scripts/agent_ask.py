@@ -27,9 +27,13 @@ def _print_trace(trace: list[dict]) -> None:
         if node == "retrieve":
             n_inj = len(e.get("injection_hits", []))
             flag = f"  injection_hits={n_inj}" if n_inj else ""
+            q = e["query"]
+            qstr = " + ".join(f"{s!r}" for s in q) if e.get("decomposed") else repr(q[:60])
+            tag = " [decomposed]" if e.get("decomposed") else ""
             print(
-                f"  {i}. retrieve      round={e['retrieval_round']}  n={e['n_chunks']}  q={e['query'][:60]!r}{flag}"
+                f"  {i}. retrieve      round={e['retrieval_round']}{tag}  n={e['n_chunks']}  papers={e.get('papers', [])}"
             )
+            print(f"        q={qstr}{flag}")
             for h in e.get("injection_hits", []):
                 print(f"        ! {h['source_id']} [{h['pattern']}] {h['snippet']!r}")
         elif node == "grade_context":

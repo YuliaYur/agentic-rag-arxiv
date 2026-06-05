@@ -29,6 +29,13 @@ class GradeResult(BaseModel):
         description="If not sufficient, a better search query (add specific terms/entities/"
         "sub-questions) to retrieve the missing context. If sufficient, repeat the question."
     )
+    sub_queries: list[str] = Field(
+        default_factory=list,
+        description="For a comparative/multi-hop question whose context is missing a paper, "
+        "ONE focused search query per subject/side (e.g. ['ELECTRA pre-training objective', "
+        "'BERT masked language modeling']) so each side is retrieved separately and merged. "
+        "Empty for single-paper questions or when the context is already sufficient.",
+    )
 
 
 class CriticResult(BaseModel):
@@ -52,6 +59,7 @@ class AgentState(TypedDict, total=False):
     # Inputs / query
     original_question: str  # the user's question (what `generate` answers)
     question: str  # current retrieval query (may be reformulated)
+    sub_queries: list[str]  # per-side queries for a decomposed re-retrieval (empty = single query)
     k: int
 
     # Retrieval

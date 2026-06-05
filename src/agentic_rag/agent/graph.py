@@ -26,7 +26,8 @@ from .state import AgentState
 def _span_input(name: str, state: dict) -> dict:
     """Small, JSON-safe snapshot of what a node is working on (no raw chunks)."""
     if name == "retrieve":
-        return {"query": state.get("question"), "k": state.get("k")}
+        sub = state.get("sub_queries") or []
+        return {"query": sub or state.get("question"), "k": state.get("k")}
     if name == "output_guard":
         return {}
     return {
@@ -86,6 +87,7 @@ def initial_state(question: str, config: AgentConfig | None = None) -> dict:
     return {
         "original_question": question,
         "question": question,
+        "sub_queries": [],
         "k": cfg.k,
         "chunks": [],
         "retrieval_round": 0,

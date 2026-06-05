@@ -16,6 +16,11 @@ from agentic_rag.answer.prompt import SYSTEM_PROMPT, build_user_prompt
 from agentic_rag.answer.schemas import CitedAnswer
 from agentic_rag.answer.validate import validate_cited_answer
 from agentic_rag.guardrails import Guardrails
+from agentic_rag.retrieve.retriever import (
+    anchor_query_to_title,
+    detect_named_papers,
+    round_robin_merge,
+)
 
 from .config import AgentConfig
 from .prompts import (
@@ -44,16 +49,36 @@ class AgentNodes:
     # 1. retrieve -------------------------------------------------------------
     def retrieve(self, state: dict) -> dict:
         rnd = state.get("retrieval_round", 0) + 1
-        query = state["question"]
-        chunks = self._retriever.retrieve(query, state.get("k", self._cfg.k))
+        k = state.get("k", self._cfg.k)
+        # Decomposed re-retrieval: if the grader split a comparison into per-side
+        # sub-queries, retrieve each side and round-robin merge so every side gets
+        # slots (a single embedding of "A vs B" is dominated by A; see ADR-0014).
+        sub_queries = (state.get("sub_queries") or [])[: self._cfg.max_sub_queries]
+        if sub_queries:
+            # Title-anchor each sub-query so a foundational paper (BERT, the
+            # original Transformer) isn't buried under the papers that cite it.
+            if self._cfg.anchor_sub_queries:
+                titles = getattr(self._retriever, "titles", {})
+                aliases = dict(self._cfg.paper_names)
+                queries = [anchor_query_to_title(q, titles, aliases) for q in sub_queries]
+            else:
+                queries = list(sub_queries)
+            per_side = [self._retriever.retrieve(q, k) for q in queries]
+            chunks = round_robin_merge(per_side, k)
+            query_used: str | list[str] = queries
+        else:
+            query_used = state["question"]
+            chunks = self._retriever.retrieve(query_used, k)
         # Input guardrail: defang prompt injection in the retrieved text *before*
         # it reaches any prompt. Sanitized chunks flow downstream to all nodes.
         chunks, hits = self._guards.sanitize_chunks(chunks)
         entry = {
             "node": "retrieve",
             "retrieval_round": rnd,
-            "query": query,
+            "query": query_used,
+            "decomposed": bool(sub_queries),
             "n_chunks": len(chunks),
+            "papers": sorted({c.arxiv_id for c in chunks}),
             "top_sources": [c.citation() for c in chunks[:3]],
             "injection_hits": [h.model_dump() for h in hits],
         }
@@ -66,18 +91,61 @@ class AgentNodes:
             build_grade_prompt(state["original_question"], state["chunks"]),
             GradeResult,
         )
+        sufficient = grade.sufficient
+        sub_queries = grade.sub_queries
+
+        # Deterministic override for named-paper coverage — a safety net over the
+        # LLM grader, which judges these borderline multi-hop cases inconsistently
+        # (see ADR-0014). For a question that names >=2 corpus papers:
+        #   * a named paper is MISSING -> force insufficient and decompose into one
+        #     title sub-query per named paper (every side, not just the missing one,
+        #     so the merge keeps the covered side instead of ping-ponging);
+        #   * all named papers PRESENT -> force sufficient, locking the coverage in
+        #     so a later LLM-driven re-retrieve can't wander off it and lose a side.
+        named, missing = ([], [])
+        if self._cfg.enforce_named_paper_coverage:
+            named, missing = self._named_coverage(state)
+        if named and missing:
+            sufficient = False
+            titles = self._retriever.titles
+            sub_queries = [titles[aid] for aid in named]
+        elif named:  # >=2 named and none missing -> coverage complete
+            sufficient = True
+
         entry = {
             "node": "grade_context",
             "retrieval_round": state["retrieval_round"],
-            "sufficient": grade.sufficient,
+            "sufficient": sufficient,
             "refined_query": grade.refined_query,
+            "sub_queries": sub_queries,
+            "named_papers": named,
+            "missing_papers": missing,
             "reasoning": grade.reasoning,
         }
-        updates: dict = {"grade": grade.model_dump(), "trace": [entry]}
-        # Reformulate the retrieval query only if we might loop back.
-        if not grade.sufficient:
+        updates: dict = {
+            "grade": {**grade.model_dump(), "sufficient": sufficient},
+            "trace": [entry],
+        }
+        # Reformulate the retrieval query only if we might loop back. Carry the
+        # per-side sub-queries too: the retrieve node fans out over them when
+        # present (decomposed re-retrieval), else falls back to the single query.
+        if not sufficient:
             updates["question"] = grade.refined_query or state["original_question"]
+            updates["sub_queries"] = sub_queries
         return updates
+
+    def _named_coverage(self, state: dict) -> tuple[list[str], list[str]]:
+        """(named, missing) arxiv_ids: papers the question names, and which aren't
+        retrieved. Only multi-paper (>=2 named) questions can have a coverage gap."""
+        titles = getattr(self._retriever, "titles", {})
+        if not titles:
+            return [], []
+        named = detect_named_papers(state["original_question"], self._cfg.paper_names)
+        named &= titles.keys()  # only papers actually in the index
+        if len(named) < 2:
+            return [], []
+        retrieved = {c.arxiv_id for c in state["chunks"]}
+        return sorted(named), sorted(named - retrieved)
 
     # 3. generate -------------------------------------------------------------
     def generate(self, state: dict) -> dict:

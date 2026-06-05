@@ -37,4 +37,13 @@ class RetrieveConfig:
     # safety net. This constant damps the blend the same way rrf_k damps fusion.
     rerank_rrf_k: int = 60
 
+    # Cap how many chunks from a SINGLE paper may occupy the final top-k. A
+    # comparison query ("how does A differ from B?") often lets the dominant
+    # paper monopolize every slot, burying the second paper the question needs
+    # (see q-0005: 5 Chinchilla chunks crowd out Kaplan's scaling-laws paper).
+    # The cap forces room for other papers. Recall@k is unaffected for genuine
+    # single-paper questions (one chunk still covers that paper); it trades a
+    # little context precision there for multi-hop coverage. None disables it.
+    max_per_paper: int | None = 3
+
     final_k: int = 5  # default number of chunks returned to the caller

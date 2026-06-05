@@ -645,3 +645,78 @@ logic and the exact pathology (`test_reranker_blends_with_fusion`,
 weakness is unrelated: the cross-paper questions (q-0001/3/4/5) sit at 0.50
 because they each expect *two* papers and retrieval surfaces only one — a
 multi-hop coverage gap, the next retrieval lever.
+
+
+## ADR-0014 — Multi-hop coverage: diversity cap + deterministic decomposed re-retrieval
+
+**Status:** Accepted (2026-06-05)
+
+**Context.** The seed comparisons q-0001/3/4/5 sat at recall@5 = 0.50: each
+expects *two* papers but retrieval surfaced one. Tracing each question through
+every stage (`scripts/trace_coverage.py`) split this into **two** mechanisms:
+
+| question | subject (rank 1) | anchor paper | dense | bm25 | fusion | blend |
+|---|---|---|---|---|---|---|
+| q-0001 ELECTRA vs BERT | ELECTRA | BERT | 16 | 17 | 17 | 13 |
+| q-0003 ViT vs Transformer | ViT | Transformer | absent | 19 | 33 | 33 |
+| q-0004 RoBERTa vs BERT | RoBERTa | BERT | 28 | 24 | 45 | 45 |
+| q-0005 Kaplan vs Chinchilla | — both top-2 in fusion — | Scaling Laws | 5 | 3 | **1** | **9** |
+
+- **q-0001/3/4 — coverage gap.** The anchor paper is buried at rank 13–45 (or
+  *absent*) at **every** stage; no reranking can recover a chunk that never
+  reaches the head. A single embedding of "how does A differ from B?" is
+  dominated by A; B is just the contrast anchor. Worse, the anchors are
+  *foundational* papers (BERT, the original Transformer) that everyone cites, so
+  even a B-targeted query retrieves the citing papers ahead of the source.
+- **q-0005 — a different bug.** Fusion already surfaces both sides (ranks 1 & 2);
+  the *rerank-blend* buries the fusion-#1 Scaling-Laws chunk to rank 9 as four
+  Chinchilla chunks crowd the head.
+
+**Decision.** Two independent, measured fixes:
+
+1. **Paper-diversity cap** (`RetrieveConfig.max_per_paper = 3`, retriever-level so
+   baseline + agent both benefit). The final top-k admits at most N chunks per
+   `arxiv_id`, backfilling if too few papers exist so it never *shrinks* a result.
+   Fixes q-0005. Recall@k is unaffected for genuine single-paper questions (one
+   chunk still covers the paper); it trades a little context precision there.
+
+2. **Deterministic decomposed re-retrieval** in the agent's existing capped
+   re-retrieve loop:
+   - **Trigger (deterministic, not the LLM).** At temperature 0, gpt-4o-mini
+     judges these borderline comparisons "sufficient" *inconsistently* (same input
+     flips between runs — residual API nondeterminism), so it under-fires the
+     loop. Instead, a registry of corpus paper names (`agent/corpus.py`,
+     `detect_named_papers`) deterministically finds which papers the question
+     *names*; if ≥2 are named and one is missing from retrieval, force a
+     re-retrieve; once all named papers are present, force *sufficient* to lock
+     the coverage so a later LLM-driven round can't wander off it.
+   - **Decomposition.** One sub-query per named paper = that paper's title;
+     retrieve each side and **round-robin merge** (every side's rank-1 before any
+     rank-2) so the dominant side can't fill every slot.
+   - **Anchoring.** `anchor_query_to_title` prepends a paper's distinctive title
+     words to a sub-query that names it, so a foundational paper isn't buried
+     under its citers. Papers whose common name isn't their title ("Attention Is
+     All You Need", ViT) are handled by the same name registry as aliases.
+
+   The trigger augments the LLM grader rather than replacing it — the same
+   "one signal among two, never an oracle" stance as ADR-0013's rerank blend.
+
+**Consequences.** End-to-end agent runs (live LLM), final-chunk recall@5:
+
+| | q-0001 | q-0003 | q-0004 | q-0005 | q-0006 (single) |
+|---|---|---|---|---|---|
+| before | 0.50 | 0.50 | 0.50 | 0.50 | 1.00 |
+| after | **1.00** | **1.00** | **1.00** | **1.00** | 1.00 |
+
+All four comparisons converge in ≤2 retrieval rounds; q-0006 (single-paper, 1
+named) does not decompose — no regression. Why a name registry and not the LLM or
+a heuristic: a lead-title-token heuristic false-matched "masked" → MAE and bundled
+the question into sub-queries (polluting anchoring); for a *fixed, documented*
+corpus a ~20-entry registry (provenance: SOURCES.md) is the precise, maintainable
+choice. Trade-offs: the registry couples the agent to corpus identities (override
+via `AgentConfig.paper_names`); the cap costs a little context precision on
+single-paper questions; forcing *sufficient* on complete coverage can stop a
+re-retrieve the LLM wanted (answer quality is still defended by the
+cite-critic/revision loop). New offline tests cover the cap, round-robin merge,
+anchoring, name detection, and the gate forcing decomposition over a "sufficient"
+LLM. `scripts/trace_coverage.py` (with `--sub`) is kept as the diagnostic.
