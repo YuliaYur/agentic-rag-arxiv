@@ -60,6 +60,8 @@ class AgentState(TypedDict, total=False):
     original_question: str  # the user's question (what `generate` answers)
     question: str  # current retrieval query (may be reformulated)
     sub_queries: list[str]  # per-side queries for a decomposed re-retrieval (empty = single query)
+    sub_queries_anchored: bool  # True if sub_queries are already title-anchored (skip re-anchoring)
+    sub_query_targets: list[str]  # parallel arxiv_id per sub_query to filter that side to (forced)
     k: int
 
     # Retrieval

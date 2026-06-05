@@ -234,6 +234,15 @@ def _prepend_title(title, query, q_tokens):
     return f"{' '.join(extra)} {query}".strip() if extra else query
 
 
+def title_anchored_query(title, query):
+    """Public: ``query`` prefixed with ``title``'s distinctive words. Used to build
+    a decomposed sub-query that is BOTH topical (keeps the question) and anchored to
+    one paper (its title terms), so retrieval gets that paper's *relevant* passage,
+    not just its abstract."""
+    q_tokens = {t for t in tokenize(query) if t not in _TITLE_STOP}
+    return _prepend_title(title, query, q_tokens)
+
+
 def detect_named_papers(question, names):
     """arxiv_ids of corpus papers the QUESTION explicitly names, via the corpus
     name registry ``names`` (name-phrase -> arxiv_id).

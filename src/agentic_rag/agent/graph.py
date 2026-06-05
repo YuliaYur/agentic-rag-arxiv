@@ -88,6 +88,8 @@ def initial_state(question: str, config: AgentConfig | None = None) -> dict:
         "original_question": question,
         "question": question,
         "sub_queries": [],
+        "sub_queries_anchored": False,
+        "sub_query_targets": [],
         "k": cfg.k,
         "chunks": [],
         "retrieval_round": 0,

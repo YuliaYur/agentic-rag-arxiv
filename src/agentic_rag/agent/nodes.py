@@ -20,6 +20,7 @@ from agentic_rag.retrieve.retriever import (
     anchor_query_to_title,
     detect_named_papers,
     round_robin_merge,
+    title_anchored_query,
 )
 
 from .config import AgentConfig
@@ -57,13 +58,36 @@ class AgentNodes:
         if sub_queries:
             # Title-anchor each sub-query so a foundational paper (BERT, the
             # original Transformer) isn't buried under the papers that cite it.
-            if self._cfg.anchor_sub_queries:
+            # Skip when already anchored (the deterministic gate pre-anchors its
+            # sub-queries; re-anchoring a query that names several papers would
+            # cross-contaminate it via the alias of whichever name sorts first).
+            if self._cfg.anchor_sub_queries and not state.get("sub_queries_anchored"):
                 titles = getattr(self._retriever, "titles", {})
                 aliases = dict(self._cfg.paper_names)
                 queries = [anchor_query_to_title(q, titles, aliases) for q in sub_queries]
             else:
                 queries = list(sub_queries)
-            per_side = [self._retriever.retrieve(q, k) for q in queries]
+            # When the gate targets a specific paper per side, KEEP only that paper's
+            # chunks from a deep pool: this guarantees the right paper *and* picks its
+            # passage most relevant to the (topical) sub-query. If the topical query
+            # didn't surface the target at all (a ViT-heavy "A vs B" can drown the B
+            # anchor), fall back to the bare title, which reliably retrieves the paper.
+            targets = state.get("sub_query_targets") or []
+            titles = getattr(self._retriever, "titles", {})
+            per_side = []
+            for i, q in enumerate(queries):
+                tgt = targets[i] if i < len(targets) else None
+                if not tgt:
+                    per_side.append(self._retriever.retrieve(q, k))
+                    continue
+                side = [c for c in self._retriever.retrieve(q, max(k, 50)) if c.arxiv_id == tgt]
+                if not side and tgt in titles:
+                    side = [
+                        c
+                        for c in self._retriever.retrieve(titles[tgt], max(k, 50))
+                        if c.arxiv_id == tgt
+                    ]
+                per_side.append(side[:k])
             chunks = round_robin_merge(per_side, k)
             query_used: str | list[str] = queries
         else:
@@ -103,12 +127,23 @@ class AgentNodes:
         #   * all named papers PRESENT -> force sufficient, locking the coverage in
         #     so a later LLM-driven re-retrieve can't wander off it and lose a side.
         named, missing = ([], [])
+        anchored = False
+        targets: list[str] = []
         if self._cfg.enforce_named_paper_coverage:
             named, missing = self._named_coverage(state)
         if named and missing:
             sufficient = False
+            # One sub-query per named paper, each = that paper's title terms
+            # prepended to the ORIGINAL question. Anchored (so the foundational
+            # paper surfaces) AND topical (so we fetch its *relevant* passage, not
+            # its abstract — a bare title tanks faithfulness/context metrics). The
+            # retrieve node filters each side to its target paper (below).
             titles = self._retriever.titles
-            sub_queries = [titles[aid] for aid in named]
+            sub_queries = [
+                title_anchored_query(titles[aid], state["original_question"]) for aid in named
+            ]
+            targets = list(named)
+            anchored = True
         elif named:  # >=2 named and none missing -> coverage complete
             sufficient = True
 
@@ -132,6 +167,8 @@ class AgentNodes:
         if not sufficient:
             updates["question"] = grade.refined_query or state["original_question"]
             updates["sub_queries"] = sub_queries
+            updates["sub_queries_anchored"] = anchored
+            updates["sub_query_targets"] = targets
         return updates
 
     def _named_coverage(self, state: dict) -> tuple[list[str], list[str]]:
