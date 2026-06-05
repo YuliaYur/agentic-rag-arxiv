@@ -1,4 +1,4 @@
-<h1 align="center">🔬 agentic-rag-arxiv</h1>
+<h1 align="center">agentic-rag-arxiv</h1>
 
 <p align="center">
   <b>Agentic RAG over 20 transformer-lineage papers.</b><br/>
@@ -16,34 +16,34 @@
   <video src="https://github.com/YuliaYur/agentic-rag-arxiv/raw/main/docs/demo.mp4" controls muted width="820"></video>
 </p>
 <p align="center">
-  <a href="docs/demo.mp4">▶ Watch the demo</a> · <a href="SOURCES.md">Corpus</a> · <a href="DECISIONS.md">Design log (ADRs)</a>
+  <a href="docs/demo.mp4">Watch the demo</a> · <a href="SOURCES.md">Corpus</a> · <a href="DECISIONS.md">Design log (ADRs)</a>
 </p>
 
 ---
 
-## ✨ Why it's a product, not a demo
+## Why it's a product, not a demo
 
-- 🎯 **Cited, or it declines.** Every `[S#]` must map to a real retrieved chunk or the
+- **Cited, or it declines.** Every `[S#]` must map to a real retrieved chunk or the
   answer is rejected — **0 fabricated citations, by construction.** Low confidence → it
   abstains instead of bluffing.
-- 🔁 **Agentic multi-hop.** *"How does ELECTRA differ from BERT?"* needs **both** papers;
+- **Agentic multi-hop.** *"How does ELECTRA differ from BERT?"* needs **both** papers;
   a single embedding leans to one. The agent spots the gap and **re-retrieves per paper** →
   recall on comparisons **0.75 → 1.00**.
-- 🛡️ **CI eval gate.** Every PR re-runs the eval and **fails the build if answer quality
+- **CI eval gate.** Every PR re-runs the eval and **fails the build if answer quality
   drops** below committed thresholds. *Quality is a versioned build signal, not a vibe.*
-- 💸 **Cost-routed + cached.** A cheap model grades/critiques, a strong one writes the
+- **Cost-routed + cached.** A cheap model grades/critiques, a strong one writes the
   answer; a semantic cache makes repeats free → **−71%** cost routed, **−100%** warm cache.
-- 🚀 **One command.** `docker compose up` brings the whole stack — agent API, Streamlit UI,
+- **One command.** `docker compose up` brings the whole stack — agent API, Streamlit UI,
   vector DB, cache — with the index **preloaded** (no corpus download, no ingestion).
 
-## 🧱 Stack
+## Stack
 
 **Agent** LangGraph · **Retrieval** Qdrant (dense + BM25 → RRF → cross-encoder) ·
 **LLM** LiteLLM routing + Redis semantic cache · **Serving** FastAPI + Streamlit ·
 **Eval/CI** native RAGAS-style metrics + LLM-judge, gated in GitHub Actions ·
 **Tracing** Langfuse · Python 3.11.
 
-## 🚀 Quick start
+## Quick start
 
 ```bash
 git clone https://github.com/YuliaYur/agentic-rag-arxiv && cd agentic-rag-arxiv
@@ -55,7 +55,7 @@ No corpus download or ingestion — the index ships as a committed fixture and l
 startup. _(Add tracing: `docker compose --profile observability up`. Non-Docker dev: see
 the docs below.)_
 
-## 📊 Results
+## Results
 
 _Real numbers — `eval/results/`, `scripts/bench_routing_cache.py`._
 
@@ -80,11 +80,11 @@ baseline leaves one side out — confirmed on the larger 24-question set (1.000 
 | **Routed** (cheap grade/critic + strong synthesis) | **$0.0071 (−71%)** | 24.3s | 0% |
 | **Routed + warm cache** | **$0.0000 (−100%)** | 16.7s | 100% |
 
-## 🏗️ Architecture
+## Architecture
 
 ![Architecture](docs/architecture.svg)
 
-## 🧠 Key decisions
+## Key decisions
 
 The interesting ones — full rationale in [`DECISIONS.md`](DECISIONS.md):
 
@@ -103,7 +103,7 @@ The interesting ones — full rationale in [`DECISIONS.md`](DECISIONS.md):
 ---
 
 <details>
-<summary>📖 <b>Full documentation</b> — Docker details, components, CLIs, local dev, layout</summary>
+<summary><b>Full documentation</b> — Docker details, components, CLIs, local dev, layout</summary>
 
 <br/>
 
