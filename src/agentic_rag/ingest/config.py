@@ -6,6 +6,7 @@ truth. Chunking parameters are explained in DECISIONS.md.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -46,11 +47,16 @@ class EmbedConfig:
 
 @dataclass(frozen=True)
 class QdrantConfig:
-    """Connection + collection settings for the local Dockerized Qdrant."""
+    """Connection + collection settings for the local Dockerized Qdrant.
 
-    host: str = "localhost"
-    port: int = 6333
-    collection: str = "arxiv_papers"
+    Host/port/collection default from env (``QDRANT_HOST``/``QDRANT_PORT``/
+    ``QDRANT_COLLECTION``) so the same code reaches ``localhost`` when run on the
+    host and the ``qdrant`` service name inside docker-compose — no call-site change.
+    """
+
+    host: str = field(default_factory=lambda: os.getenv("QDRANT_HOST", "localhost"))
+    port: int = field(default_factory=lambda: int(os.getenv("QDRANT_PORT", "6333")))
+    collection: str = field(default_factory=lambda: os.getenv("QDRANT_COLLECTION", "arxiv_papers"))
     upsert_batch: int = 256
 
 

@@ -1,27 +1,30 @@
-# Local infra for the RAG stack.
-#   docker compose up -d        # start Qdrant + Langfuse (data persists in ./data)
-#   docker compose down         # stop
+# One command to run the whole stack:
 #
-# Qdrant dashboard:  http://localhost:6333/dashboard
-# Langfuse UI:       http://localhost:3000   (login: dev@example.com / localdevpassword)
+#   cp .env.example .env        # then put your OPENAI_API_KEY in it
+#   docker compose up --build   # → UI http://localhost:8501 · API http://localhost:8000/docs
 #
-# Langfuse is the self-hosted v2 stack (one server + Postgres) — light enough to run
-# locally. A project and API keys are auto-provisioned on first boot via the
-# LANGFUSE_INIT_* vars below, so the keys in .env.example work out of the box.
-# These are LOCAL-DEV credentials — rotate them for any non-local use.
+# That brings up the lean core: Qdrant + Redis + a one-shot index loader + the API +
+# the Streamlit UI. Observability is opt-in (it's heavier):
+#
+#   docker compose --profile observability up --build   # adds Langfuse at :3000
+#
+# Each service's role is documented in the README "Run locally" section. The index is
+# loaded from the committed fixture (eval/fixtures/index.jsonl.gz), so this works from
+# a fresh clone with NO corpus download or ingestion.
+
 services:
+  # --- vector index ---------------------------------------------------------
   qdrant:
     image: qdrant/qdrant:v1.12.4
     container_name: agentic-rag-qdrant
     ports:
-      - "6333:6333"   # REST + dashboard
+      - "6333:6333"   # REST + dashboard (http://localhost:6333/dashboard)
       - "6334:6334"   # gRPC
     volumes:
       - ./data/qdrant:/qdrant/storage
     restart: unless-stopped
 
-  # Backend for the LiteLLM semantic cache. redis-stack-server bundles RediSearch,
-  # which LiteLLM's `redis-semantic` cache needs for vector similarity search.
+  # --- semantic-cache backend (used only when LLM_CACHE_ENABLED=true) --------
   redis:
     image: redis/redis-stack-server:7.4.0-v0
     container_name: agentic-rag-redis
@@ -29,11 +32,80 @@ services:
       - "6379:6379"
     volumes:
       - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
 
+  # --- one-shot: load the committed index fixture into Qdrant ----------------
+  # Runs once and exits; the API waits for it to finish (so retrieval works from
+  # scratch without the corpus PDFs or `rag-ingest`).
+  index-init:
+    build: .
+    image: agentic-rag-app:local
+    container_name: agentic-rag-index-init
+    depends_on:
+      qdrant:
+        condition: service_started
+    environment:
+      QDRANT_HOST: qdrant
+    command: ["python", "scripts/load_index_fixture.py"]
+    restart: "no"
+
+  # --- the agent over HTTP (FastAPI) ----------------------------------------
+  api:
+    build: .
+    image: agentic-rag-app:local
+    container_name: agentic-rag-api
+    depends_on:
+      index-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env                       # OPENAI_API_KEY etc. from the file (not a stale shell var)
+    environment:                   # overrides: reach services by name, not localhost
+      QDRANT_HOST: qdrant
+      REDIS_HOST: redis
+      LANGFUSE_HOST: http://langfuse:3000
+      LANGFUSE_TRACING: "false"
+      KMP_DUPLICATE_LIB_OK: "TRUE"
+      OMP_NUM_THREADS: "1"
+      TOKENIZERS_PARALLELISM: "false"
+    ports:
+      - "8000:8000"
+    volumes:
+      - hf-cache:/app/hf-cache     # embedder + reranker download once, persist across restarts
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 180s           # first boot downloads ~200MB of models + builds the agent
+    restart: unless-stopped
+
+  # --- Streamlit demo UI (thin HTTP client of the API) ----------------------
+  ui:
+    build: .
+    image: agentic-rag-app:local
+    container_name: agentic-rag-ui
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "8501:8501"
+    command: ["streamlit", "run", "ui/streamlit_app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
+    restart: unless-stopped
+
+  # --- observability (opt-in: `--profile observability`) --------------------
   langfuse-db:
     image: postgres:16
     container_name: agentic-rag-langfuse-db
+    profiles: ["observability"]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -50,6 +122,7 @@ services:
   langfuse:
     image: langfuse/langfuse:2
     container_name: agentic-rag-langfuse
+    profiles: ["observability"]
     depends_on:
       langfuse-db:
         condition: service_healthy
@@ -61,8 +134,6 @@ services:
       # Local-dev secrets — do NOT use these values anywhere real.
       NEXTAUTH_SECRET: local-dev-not-a-secret-change-me
       SALT: local-dev-salt-change-me
-      # Must be quoted: a bare hex/number string is otherwise parsed as a YAML
-      # number. 64 hex chars (256-bit); regenerate with `openssl rand -hex 32`.
       ENCRYPTION_KEY: "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
       TELEMETRY_ENABLED: "false"
       LANGFUSE_INIT_ORG_ID: local
@@ -75,3 +146,6 @@ services:
       LANGFUSE_INIT_USER_NAME: dev
       LANGFUSE_INIT_USER_PASSWORD: localdevpassword
     restart: unless-stopped
+
+volumes:
+  hf-cache:
