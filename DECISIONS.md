@@ -793,8 +793,10 @@ cost accounting, and pluggable caching behind the same `structured()` contract.
   ~0 latency.** Off by default.
 - **Cost + latency capture.** Each call records `(model, cost, latency, cached,
   tokens)` to a `contextvar` metering scope (`llm/metering.py`); LiteLLM's real
-  per-call cost is attached to the traced generation (so Langfuse cost reflects
-  routing and is **0 on a cache hit**). `run_agent` meters the whole run and writes
+  per-call cost is passed to the traced generation as its `totalCost` — so Langfuse
+  shows **what we actually paid** (and **$0 on a cache hit**) instead of estimating
+  from token counts (a cached response still carries tokens, so the token estimate
+  would wrongly bill the hit). `run_agent` meters the whole run and writes
   `cost_usd` / `llm_calls` / `cache_hits` / `llm_latency_ms` onto the root trace
   (Langfuse aggregates p50/p95 across traces); the numbers are also returned in state
   and printed by `agent_ask`.

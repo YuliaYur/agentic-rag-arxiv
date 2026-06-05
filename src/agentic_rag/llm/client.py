@@ -109,15 +109,19 @@ class LLMClient:
             )
         )
 
-        # Trace the generation. Token usage lets Langfuse cross-check; we attach the
-        # *actual* LiteLLM cost + cache flag as metadata (0 cost on a cache hit).
+        # Trace the generation. We pass LiteLLM's *actual* cost as ``totalCost`` so
+        # Langfuse shows what we really paid (0 on a cache hit) instead of estimating
+        # cost from the token counts — a cached response still carries tokens, so the
+        # token-based estimate would wrongly bill a cache hit.
         from agentic_rag.observability import get_tracer
 
-        usage_details = (
-            {"input": in_tok, "output": out_tok, "total": in_tok + out_tok, "unit": "TOKENS"}
-            if usage is not None
-            else None
-        )
+        usage_details = {
+            "input": in_tok,
+            "output": out_tok,
+            "total": in_tok + out_tok,
+            "unit": "TOKENS",
+            "totalCost": cost,
+        }
         get_tracer().generation(
             name=name,
             model=model,
