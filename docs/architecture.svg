@@ -1,0 +1,201 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1640 1000" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#555"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1640" height="1000" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="40" y="40" font-size="26" font-weight="700" fill="#1f2937">agentic-rag-arxiv — agentic RAG architecture</text>
+  <text x="40" y="62" font-size="13" fill="#6b7280">Query-time flow (top) · offline ingestion (bottom) · cross-cutting services (right)</text>
+
+  <!-- ================= QUERY-TIME FLOW LANE ================= -->
+  <rect x="30" y="78" width="1180" height="555" rx="12" fill="#fbfdfb" stroke="#9bbfa6" stroke-width="1.5"/>
+  <text x="50" y="103" font-size="15" font-weight="700" fill="#4b7d5b">QUERY-TIME FLOW · main path</text>
+
+  <!-- Front row -->
+  <rect x="60" y="120" width="110" height="55" rx="9" fill="#D8E6F3" stroke="#4F86C6" stroke-width="1.5"/>
+  <text x="115" y="153" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">User</text>
+
+  <rect x="210" y="120" width="150" height="55" rx="9" fill="#D8E6F3" stroke="#4F86C6" stroke-width="1.5"/>
+  <text x="285" y="153" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">Streamlit UI</text>
+
+  <rect x="400" y="110" width="300" height="75" rx="9" fill="#DCEFE0" stroke="#5AA56F" stroke-width="1.5"/>
+  <text x="550" y="135" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle">FastAPI service</text>
+  <text x="550" y="153" font-size="10.5" fill="#4b5563" text-anchor="middle">POST /query · GET /health</text>
+  <text x="550" y="168" font-size="10.5" fill="#4b5563" text-anchor="middle">rate-limit · validation · clean errors</text>
+
+  <line x1="170" y1="147" x2="208" y2="147" stroke="#555" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="360" y1="147" x2="398" y2="147" stroke="#555" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="550" y1="185" x2="550" y2="223" stroke="#555" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="560" y="208" font-size="10" fill="#6b7280">invoke graph</text>
+
+  <!-- Agent container -->
+  <rect x="60" y="225" width="1000" height="260" rx="12" fill="#EAF6EC" stroke="#5AA56F" stroke-width="1.8"/>
+  <text x="80" y="249" font-size="15" font-weight="700" fill="#3f7a52">Agent (LangGraph)</text>
+
+  <!-- Upper feedback loop: grade_context -> retrieve -->
+  <path d="M369,320 C369,296 182,296 182,320" fill="none" stroke="#3f7a52" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="275" y="289" font-size="10.5" fill="#3f7a52" text-anchor="middle">re-retrieve if a named paper is missing (decomposed, per-paper)</text>
+
+  <!-- Nodes -->
+  <g>
+    <rect x="100" y="320" width="165" height="78" rx="9" fill="#CDE9D6" stroke="#4E9E68" stroke-width="1.5"/>
+    <text x="182" y="364" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle">retrieve</text>
+    <rect x="287" y="320" width="165" height="78" rx="9" fill="#CDE9D6" stroke="#4E9E68" stroke-width="1.5"/>
+    <text x="369" y="364" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle">grade_context</text>
+    <rect x="474" y="320" width="165" height="78" rx="9" fill="#CDE9D6" stroke="#4E9E68" stroke-width="1.5"/>
+    <text x="556" y="364" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle">generate</text>
+    <rect x="661" y="320" width="165" height="78" rx="9" fill="#CDE9D6" stroke="#4E9E68" stroke-width="1.5"/>
+    <text x="743" y="364" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle">cite_critic</text>
+    <rect x="848" y="320" width="165" height="78" rx="9" fill="#CDE9D6" stroke="#4E9E68" stroke-width="1.5"/>
+    <text x="930" y="364" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle">output_guard</text>
+  </g>
+
+  <!-- Forward arrows between nodes -->
+  <line x1="265" y1="359" x2="285" y2="359" stroke="#555" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="452" y1="359" x2="472" y2="359" stroke="#555" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="639" y1="359" x2="659" y2="359" stroke="#555" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="826" y1="359" x2="846" y2="359" stroke="#555" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- Lower feedback loop: cite_critic -> generate -->
+  <path d="M743,398 C743,424 556,424 556,398" fill="none" stroke="#3f7a52" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="650" y="441" font-size="10.5" fill="#3f7a52" text-anchor="middle">revise unsupported claims (≤2x)</text>
+
+  <!-- Hybrid retrieval sub-box (below container) -->
+  <rect x="100" y="505" width="470" height="66" rx="9" fill="#DCEFE0" stroke="#5AA56F" stroke-width="1.4"/>
+  <text x="335" y="532" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">Hybrid retrieval</text>
+  <text x="335" y="550" font-size="10.5" fill="#4b5563" text-anchor="middle">dense (Qdrant) + BM25 → RRF fusion → cross-encoder rerank</text>
+  <line x1="182" y1="398" x2="182" y2="503" stroke="#555" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- Guardrails note -->
+  <rect x="600" y="505" width="230" height="86" rx="8" fill="#FFF6DA" stroke="#D9C36B" stroke-width="1.3" stroke-dasharray="5 4"/>
+  <text x="612" y="525" font-size="12" font-weight="700" fill="#8a6d1f">Guardrails</text>
+  <text x="612" y="543" font-size="10.5" fill="#6b5618">· injection scrub on chunks</text>
+  <text x="612" y="559" font-size="10.5" fill="#6b5618">· grounding (cite-or-abstain)</text>
+  <text x="612" y="575" font-size="10.5" fill="#6b5618">· confidence gate</text>
+  <line x1="715" y1="505" x2="715" y2="486" stroke="#8a6d1f" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+
+  <!-- Cited answer box -->
+  <rect x="850" y="505" width="210" height="66" rx="9" fill="#D8E6F3" stroke="#4F86C6" stroke-width="1.5"/>
+  <text x="955" y="532" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">Cited answer</text>
+  <text x="955" y="550" font-size="10.5" fill="#4b5563" text-anchor="middle">— or a safe decline</text>
+  <line x1="930" y1="398" x2="930" y2="503" stroke="#555" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- Return to UI -->
+  <path d="M955,571 L955,610 L45,610 L45,196 L283,196" fill="none" stroke="#555" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="500" y="603" font-size="10.5" fill="#6b7280">response</text>
+
+  <!-- ================= INGESTION LANE ================= -->
+  <rect x="30" y="690" width="1180" height="170" rx="12" fill="#f4f4f4" stroke="#b0b0b0" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="50" y="715" font-size="15" font-weight="700" fill="#6b7280">INGESTION · offline, idempotent</text>
+
+  <g>
+    <rect x="70" y="748" width="150" height="66" rx="9" fill="#ECECEC" stroke="#B0B0B0" stroke-width="1.4"/>
+    <text x="145" y="776" font-size="12.5" font-weight="600" fill="#374151" text-anchor="middle">20 arXiv PDFs</text>
+    <text x="145" y="793" font-size="10" fill="#6b7280" text-anchor="middle">data/raw/</text>
+
+    <rect x="270" y="748" width="160" height="66" rx="9" fill="#ECECEC" stroke="#B0B0B0" stroke-width="1.4"/>
+    <text x="350" y="785" font-size="12.5" font-weight="600" fill="#374151" text-anchor="middle">parse (PyMuPDF)</text>
+
+    <rect x="480" y="748" width="170" height="66" rx="9" fill="#ECECEC" stroke="#B0B0B0" stroke-width="1.4"/>
+    <text x="565" y="785" font-size="12.5" font-weight="600" fill="#374151" text-anchor="middle">section-aware chunk</text>
+
+    <rect x="700" y="748" width="160" height="66" rx="9" fill="#ECECEC" stroke="#B0B0B0" stroke-width="1.4"/>
+    <text x="780" y="785" font-size="12.5" font-weight="600" fill="#374151" text-anchor="middle">embed (bge-small)</text>
+  </g>
+  <line x1="220" y1="781" x2="268" y2="781" stroke="#888" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="430" y1="781" x2="478" y2="781" stroke="#888" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="650" y1="781" x2="698" y2="781" stroke="#888" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- embed -> Qdrant (index write), routed around the right margin -->
+  <path d="M860,781 L1612,781 L1612,447 L1522,447" fill="none" stroke="#888" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <text x="1000" y="774" font-size="10.5" fill="#6b7280">index (write)</text>
+
+  <!-- ================= CROSS-CUTTING SERVICES ================= -->
+  <rect x="1230" y="78" width="380" height="612" rx="12" fill="#fcfcfc" stroke="#cfcfcf" stroke-width="1.4"/>
+  <text x="1250" y="103" font-size="15" font-weight="700" fill="#6b7280">CROSS-CUTTING SERVICES</text>
+
+  <!-- LiteLLM -->
+  <rect x="1250" y="120" width="340" height="125" rx="9" fill="#E8DDF3" stroke="#8A66B0" stroke-width="1.6"/>
+  <text x="1420" y="144" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle">LiteLLM gateway</text>
+  <text x="1420" y="164" font-size="10.5" fill="#4b5563" text-anchor="middle">per-role routing:</text>
+  <text x="1420" y="183" font-size="10.5" fill="#4b5563" text-anchor="middle">gpt-4o-mini → grade / critic</text>
+  <text x="1420" y="201" font-size="10.5" fill="#4b5563" text-anchor="middle">gpt-4o → synthesis</text>
+  <text x="1420" y="225" font-size="10.5" font-weight="600" fill="#5b3f80" text-anchor="middle">+ semantic cache</text>
+
+  <!-- Redis cylinder -->
+  <g>
+    <path d="M1320,278 L1320,342 A100,13 0 0 0 1520,342 L1520,278" fill="#E8DDF3" stroke="#8A66B0" stroke-width="1.5"/>
+    <ellipse cx="1420" cy="278" rx="100" ry="13" fill="#EFE7F7" stroke="#8A66B0" stroke-width="1.5"/>
+    <text x="1420" y="312" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">Redis</text>
+    <text x="1420" y="329" font-size="10.5" fill="#4b5563" text-anchor="middle">semantic cache</text>
+  </g>
+
+  <!-- Qdrant cylinder -->
+  <g>
+    <path d="M1320,413 L1320,477 A100,13 0 0 0 1520,477 L1520,413" fill="#FBE7CD" stroke="#D6963F" stroke-width="1.5"/>
+    <ellipse cx="1420" cy="413" rx="100" ry="13" fill="#FDF1E0" stroke="#D6963F" stroke-width="1.5"/>
+    <text x="1420" y="447" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">Qdrant</text>
+    <text x="1420" y="464" font-size="10.5" fill="#4b5563" text-anchor="middle">vector index</text>
+  </g>
+
+  <!-- Langfuse -->
+  <rect x="1250" y="540" width="340" height="95" rx="9" fill="#E4E4E4" stroke="#8C8C8C" stroke-width="1.6"/>
+  <text x="1420" y="567" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle">Langfuse</text>
+  <text x="1420" y="587" font-size="10.5" fill="#4b5563" text-anchor="middle">traces · cost / query</text>
+  <text x="1420" y="604" font-size="10.5" fill="#4b5563" text-anchor="middle">p50 / p95 latency</text>
+
+  <!-- CI eval gate (separate, red accent) -->
+  <rect x="1250" y="710" width="340" height="112" rx="9" fill="#FAD9D7" stroke="#C24A45" stroke-width="2"/>
+  <text x="1420" y="736" font-size="14" font-weight="700" fill="#9b2c27" text-anchor="middle">CI eval gate</text>
+  <text x="1420" y="757" font-size="10.5" fill="#7a2420" text-anchor="middle">every PR re-runs the eval suite</text>
+  <text x="1420" y="774" font-size="10.5" fill="#7a2420" text-anchor="middle">fails the build if metrics drop</text>
+  <text x="1420" y="791" font-size="10.5" fill="#7a2420" text-anchor="middle">below committed thresholds</text>
+
+  <!-- Frozen index fixture note -->
+  <rect x="1250" y="838" width="340" height="48" rx="8" fill="#FFF6DA" stroke="#D9C36B" stroke-width="1.3" stroke-dasharray="5 4"/>
+  <text x="1420" y="858" font-size="10.5" font-weight="600" fill="#8a6d1f" text-anchor="middle">Frozen index fixture</text>
+  <text x="1420" y="874" font-size="10.5" fill="#6b5618" text-anchor="middle">lets CI + Docker skip corpus / ingest</text>
+
+  <!-- ===== Cross-cutting connections (dashed) ===== -->
+  <!-- Agent -> LiteLLM -->
+  <path d="M1060,300 L1150,300 L1150,180 L1248,180" fill="none" stroke="#8A66B0" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <text x="1095" y="293" font-size="10.5" fill="#7a5aa0">all LLM calls</text>
+
+  <!-- LiteLLM -> Redis -->
+  <line x1="1420" y1="245" x2="1420" y2="263" stroke="#8A66B0" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <text x="1432" y="259" font-size="10" fill="#7a5aa0">cache</text>
+
+  <!-- Hybrid -> Qdrant -->
+  <path d="M570,538 L1380,538 L1380,492" fill="none" stroke="#D6963F" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <text x="930" y="531" font-size="10.5" fill="#b07a2e">dense vector search</text>
+
+  <!-- Agent -> Langfuse -->
+  <path d="M1060,425 L1120,425 L1120,575 L1248,575" fill="none" stroke="#8C8C8C" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <text x="1063" y="418" font-size="10.5" fill="#6b7280">traces · cost · latency</text>
+
+  <!-- Agent -> CI gate -->
+  <path d="M1060,460 L1195,460 L1195,765 L1248,765" fill="none" stroke="#C24A45" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <text x="1100" y="453" font-size="10.5" fill="#9b2c27">scored by</text>
+
+  <!-- ================= LEGEND ================= -->
+  <g font-size="11" fill="#374151">
+    <rect x="40" y="930" width="16" height="16" rx="3" fill="#D8E6F3" stroke="#4F86C6"/>
+    <text x="62" y="943">Client</text>
+    <rect x="135" y="930" width="16" height="16" rx="3" fill="#CDE9D6" stroke="#4E9E68"/>
+    <text x="157" y="943">API / Agent</text>
+    <rect x="265" y="930" width="16" height="16" rx="3" fill="#FBE7CD" stroke="#D6963F"/>
+    <text x="287" y="943">Data store</text>
+    <rect x="385" y="930" width="16" height="16" rx="3" fill="#E8DDF3" stroke="#8A66B0"/>
+    <text x="407" y="943">LiteLLM / cache</text>
+    <rect x="540" y="930" width="16" height="16" rx="3" fill="#E4E4E4" stroke="#8C8C8C"/>
+    <text x="562" y="943">Observability</text>
+    <rect x="685" y="930" width="16" height="16" rx="3" fill="#ECECEC" stroke="#B0B0B0" stroke-dasharray="3 2"/>
+    <text x="707" y="943">Ingestion (offline)</text>
+    <rect x="860" y="930" width="16" height="16" rx="3" fill="#FAD9D7" stroke="#C24A45"/>
+    <text x="882" y="943">CI quality gate</text>
+  </g>
+</svg>
