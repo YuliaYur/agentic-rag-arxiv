@@ -733,6 +733,16 @@ distinct papers in context → less "pure"), but context *recall* is higher (it 
 what the answer needs) and the holistic judge is unaffected (agent == baseline on
 all 6 questions).
 
+Running the full set later (24 *draft* questions, RAGAS + judge) confirmed it
+generalizes — and that the fix holds, with **no recurrence of the bare-title
+regression**: agent recall@5 1.000 vs 0.958, MRR 0.958 vs 0.938, faithfulness
+0.953 (healthy), context precision 0.925 (here the agent *wins* it — 16 of 24 are
+single-paper and don't decompose), context recall 0.779. The agent rescued the two
+comparisons single-shot missed (q-0024, q-0027: 0.50 → 1.00). The judge trails on
+three (q-0015/0028/0030) — all uncurated draft labels, i.e. curation-triage
+candidates, not necessarily agent faults. (Numbers are provisional until those
+labels are curated; treat the draft run as a stress test, not a benchmark.)
+
 Why a name registry and not the LLM or a heuristic: a lead-title-token heuristic
 false-matched "masked" → MAE and bundled the question into sub-queries (polluting
 anchoring); for a *fixed, documented* corpus a ~20-entry registry (provenance:
