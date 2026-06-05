@@ -1,12 +1,97 @@
 # agentic-rag-arxiv
 
-Agentic RAG over a curated corpus of 20 transformer-lineage arXiv papers. This
-repo currently implements the **ingestion pipeline**: PDFs → structure-aware
-chunks → local embeddings → a Qdrant vector index that downstream retrieval can
-cite.
+> **Production-grade agentic RAG over the transformer-lineage papers** — every answer
+> is grounded and **cited (or it declines)**, self-checked by a citation critic,
+> **regression-gated in CI**, cost-routed + cached through LiteLLM, and runnable with
+> one `docker compose up`.
 
-See [`SOURCES.md`](SOURCES.md) for the corpus and [`DECISIONS.md`](DECISIONS.md)
-for the design rationale (parser choice, chunking parameters, tuning guide).
+<!-- Architecture diagram — drop your image at docs/architecture.png -->
+![Architecture](docs/architecture.png)
+
+**🎥 90-second demo:** _add video link_ · Corpus: [`SOURCES.md`](SOURCES.md) · Design log: [`DECISIONS.md`](DECISIONS.md)
+
+## What this is & why it exists
+
+A RAG system that answers questions over ~20 ML papers — the transformer lineage
+(*Attention Is All You Need* → BERT/RoBERTa/ELECTRA → ViT/Swin/CLIP →
+RAG/DPR/LoRA/FlashAttention …). The corpus is a deliberate *lineage* so questions can
+be comparative and multi-hop ("how does ELECTRA's objective differ from BERT's?") —
+the kind that justifies an agent loop over single-shot RAG.
+
+It targets the four things that separate a RAG **demo** from a RAG **product**:
+
+- **Hallucination & uncited claims** → a grounding validator enforces *cite-or-abstain*
+  (every `[S#]` must map to a retrieved chunk or the answer is rejected) + a cite-critic
+  audits claim support; below a confidence bar the system **declines** instead of bluffing.
+- **Multi-hop / comparative questions** → an agentic loop detects when a named paper is
+  missing and **re-retrieves per paper** (a single embedding of "A vs B" is dominated by A).
+- **Silent quality regression** → a **CI eval gate** fails the build when metrics drop
+  below committed thresholds.
+- **Cost & latency** → per-role model routing + a semantic cache, with cost/latency
+  surfaced per query.
+
+## Results
+
+_Real numbers from the committed eval + benchmark (`eval/results/`, `scripts/bench_routing_cache.py`)._
+
+**Answer quality — single-shot baseline vs the agent** (6 vetted "seed" questions; factual + cross-paper):
+
+| Metric | Baseline | Agent |
+|---|---|---|
+| Recall@5 | 0.75 | **1.00** |
+| MRR | 0.875 | 0.875 |
+| Faithfulness | 0.706 | **0.762** |
+| Answer relevancy | 0.717 | 0.706 |
+| Context precision | **0.881** | 0.650 |
+| Context recall | 0.610 | **0.656** |
+| LLM-judge (norm.) | 0.958 | 0.958 |
+
+The agent takes **every multi-hop/comparative question to recall@5 = 1.00** (both papers
+retrieved) where baseline leaves one side out — confirmed on the larger 24-question set
+(agent recall **1.000 vs 0.958**, judge tied). Lower context *precision* is the designed
+cost of multi-paper coverage, offset by higher context *recall*.
+
+**Grounding / hallucination**
+
+| | Baseline (no critic) | Agent (cite-critic + grounding gate) |
+|---|---|---|
+| Fabricated citations | **0** *(enforced)* | **0** *(enforced)* |
+| Unsupported-claim rate¹ | ~29% | **~24%** |
+| When support is weak | answers anyway | **declines** |
+
+¹ `1 − faithfulness` on the seed set. The fabricated-citation rate is **0 by construction** —
+the grounding validator rejects any citation not backed by a retrieved chunk. ("Baseline" is
+the single-shot system with no cite-critic; a dedicated critic on/off ablation wasn't run.)
+
+**Cost & latency — before/after the LiteLLM routing + cache layer** (agent over a query set):
+
+| Config | $ / query | p50 | p95 | Cache hits |
+|---|---|---|---|---|
+| Uniform strong model (`gpt-4o`), no cache | $0.0246 | 22.8s | 29.0s | 0% |
+| **Routed** (`gpt-4o` synth + `gpt-4o-mini` grade/critic) | **$0.0071 (−71%)** | 24.3s | 28.7s | 0% |
+| **Routed + semantic cache** (warm) | **$0.0000 (−100%)** | 16.7s | 17.1s | 100% |
+
+Routing concentrates spend on the one user-facing call (**−71%**); the cache makes repeats
+**free** (a hit is $0 and skips the LLM — 3.5s → 0.3s at the call level).
+
+## Key architectural decisions
+
+Full rationale in [`DECISIONS.md`](DECISIONS.md). Highlights:
+
+- **CI eval gate — the differentiator.** Every PR re-runs the eval and **fails the build if
+  quality regresses below committed floors** (`eval/thresholds.json`); a frozen index fixture
+  lets CI skip the corpus/ingest. Quality becomes a versioned build signal, not a vibe —
+  *the line between an LLM demo and an LLM product* (ADR-0011 + CI).
+- **Agentic loop, two capped cycles** — re-retrieve on weak context, revise on unsupported
+  claims — with **keep-best** so a revision can never worsen the answer (ADR-0008/0012).
+- **Deterministic multi-hop coverage** — a corpus name-registry forces a per-paper re-retrieve
+  when a named paper is missing; the LLM grader alone was too flaky even at temperature 0 (ADR-0014).
+- **Grounding + guardrails** — cite-or-abstain enforcement, prompt-injection neutralization on
+  retrieved chunks, and an abstain/confidence gate (ADR-0007/0009).
+- **Hybrid retrieval** — dense + BM25 → RRF → cross-encoder, *blended* so the reranker can't
+  bury a fusion-strong chunk (ADR-0013).
+- **LiteLLM routing + Redis semantic cache** — per-role models, real cost/latency in Langfuse;
+  default model unchanged so the gate stays stable (ADR-0015).
 
 ## Run locally (one command)
 
@@ -50,6 +135,38 @@ variable), and inside the compose network services reach each other by **name**
 (`qdrant`, `redis`, `langfuse`) rather than `localhost`.
 
 For development without Docker (uv + local processes), see the Quickstart below.
+
+## Demo video
+
+**🎥 90-second walkthrough:** _add link_
+
+<details><summary>Script (~90s)</summary>
+
+1. **(0:00–0:10) Hook.** "Agentic RAG over 20 transformer-lineage papers — grounded,
+   cited, self-checked, eval-gated. One command brings up the whole stack." →
+   `docker compose up`, open the UI.
+2. **(0:10–0:35) A comparison question.** Ask *"How does ELECTRA's pre-training objective
+   differ from BERT's?"* While it answers, point at the **"How the agent got here"** panel:
+   round-1 retrieve → grader sees BERT missing → **decomposed re-retrieve** brings in both
+   papers → generate → cite-critic. "Single-shot RAG answers from one paper; the agent
+   notices the gap and fixes it."
+3. **(0:35–0:55) Grounding.** Show the **Sources** — each `[S#]` links to the real
+   paper/section; citations are validated against retrieved chunks. Ask something
+   off-corpus → it **declines** instead of bluffing.
+4. **(0:55–1:15) The engineering.** "Every call routes through LiteLLM — a cheap model
+   grades, a stronger one writes the answer; repeats hit a semantic cache, cost → $0.
+   Cost and p50/p95 latency are tracked per query in Langfuse."
+5. **(1:15–1:30) The differentiator.** Show the green **eval-gate** check on a PR. "Every
+   PR re-runs the eval and fails the build if quality regresses below committed thresholds —
+   that's what makes it a product, not a demo."
+
+</details>
+
+---
+
+## Deep dive
+
+The sections below document each component in detail.
 
 ## Pipeline
 
