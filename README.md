@@ -298,6 +298,51 @@ This is the line between shipping an LLM *demo* and operating an LLM *product*:
 demos are judged once, by their author; products regress continuously, under
 everyone's changes, and need a machine that says **no** before the regression ships.
 
+## Serving (FastAPI) + demo UI (Streamlit)
+
+A FastAPI service wraps the agent behind one clean endpoint; a Streamlit UI (a thin
+HTTP client of that API) makes it demo-able — the cited answer, its sources, and a
+panel tracing the agent's reasoning.
+
+```bash
+pip install -e ".[serve,ui]"
+docker compose up -d qdrant                       # (+ redis if LLM_CACHE_ENABLED)
+uvicorn agentic_rag.api.app:app --port 8000       # the API (loads models once at startup)
+streamlit run ui/streamlit_app.py                 # the UI → http://localhost:8501
+```
+
+**The API** (`src/agentic_rag/api/`):
+- `POST /query` `{question, k?, max_retrieval_rounds?, max_revision_rounds?}` → a
+  structured `QueryResponse`: `action` (answer|decline), `answer`, `confidence`,
+  `grounded`, `citations[]`, `steps[]` (the agent's per-node trace), `metering`
+  (cost/latency/cache), `retrieval_rounds`/`revision_rounds`.
+- `GET /health` → `{status, agent_ready}`.
+- **Rate limiting** (slowapi, default `10/minute` per IP → `429`) and **error
+  handling**: `422` (bad input), `503` (agent not ready), and a clean JSON
+  `{error, detail}` `502` for any agent/upstream failure (e.g. a provider quota
+  error) — never a stack trace.
+- The heavy agent is built **once** at startup (lifespan) and calls are serialized by
+  a lock (the embedder/reranker aren't concurrency-safe) behind the rate limit — an
+  honest single-instance posture; scale = more replicas + a shared model server.
+
+### How the UI maps to the architecture (demo narration)
+
+Each panel corresponds to a stage of the pipeline — narrate it top to bottom:
+
+| UI element | What it shows | Architecture |
+|---|---|---|
+| Question box | the user's question | entry to the agent graph |
+| **Answer** + grounded/confidence badge | the final cited answer, or a decline | `generate` → grounding validator → output guardrail (cite-or-abstain + confidence gate) |
+| **Sources** list | `[S#]` → paper, §section, page, arXiv link | retrieved chunks; citations resolved authoritatively by the grounding validator (not the model's copy) |
+| **"How the agent got here"** panel | one line per node | the LangGraph nodes — `retrieve` (hybrid dense+BM25+rerank over Qdrant; rounds + decomposition), `grade_context` (sufficient? missing papers?), `generate` (grounded? citations), `cite_critic` (claims supported? score), `output_guard` (answer/decline) — including the **re-retrieve and revise loops** |
+| **cost / calls / cache / latency** line | what the query cost | LiteLLM per-role routing + semantic cache + metering (ADR-0015) |
+
+**A 4-beat demo script:** (1) a single-paper factual question → one retrieval round,
+grounded answer, sources. (2) A *comparison* ("how does ELECTRA differ from BERT?") →
+the steps panel shows **decomposed re-retrieval** pulling in the second paper
+(ADR-0014). (3) Something outside the corpus → the guardrail **declines** instead of
+hallucinating. (4) Re-ask with the cache on → `cache hits > 0` and cost ≈ $0.
+
 ## Tests & quality
 
 ```bash
