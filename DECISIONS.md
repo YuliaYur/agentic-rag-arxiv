@@ -742,5 +742,8 @@ costs a little context precision on single-paper questions; forcing *sufficient*
 on complete coverage can stop a re-retrieve the LLM wanted (answer quality is still
 defended by the cite-critic/revision loop). New offline tests cover the cap,
 round-robin merge, anchoring, name detection, and the gate forcing decomposition
-over a "sufficient" LLM. `scripts/trace_coverage.py` (with `--sub`) is the
-diagnostic.
+over a "sufficient" LLM. Alias phrases match CONTIGUOUSLY (a memory-free registry
+triage over all 30 questions, `scripts/check_registry_coverage.py`, caught
+"original transformer" mis-firing on q-0026's "Swin *Transformer* … the *original*
+ViT" — it would have force-fetched the irrelevant Transformer paper). Diagnostics:
+`scripts/trace_coverage.py` (with `--sub`) and `scripts/check_registry_coverage.py`.

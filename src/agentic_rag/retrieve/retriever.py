@@ -179,6 +179,15 @@ def round_robin_merge(result_lists, k):
     return merged
 
 
+def _alias_in(phrase, text_norm):
+    """True if alias ``phrase`` occurs as a CONTIGUOUS token phrase in ``text_norm``
+    (the question, already token-normalized to space-joined lowercase). Contiguity
+    matters: "original transformer" must not match "Swin *Transformer* ... the
+    *original* ViT", where both tokens appear but not as the phrase."""
+    p = " ".join(tokenize(phrase))
+    return bool(p) and f" {p} " in f" {text_norm} "
+
+
 def anchor_query_to_title(query, titles, aliases=None, max_df=2):
     """Prepend a paper's distinctive title terms to a sub-query that names it.
 
@@ -188,8 +197,8 @@ def anchor_query_to_title(query, titles, aliases=None, max_df=2):
     points at one corpus paper, we prepend that paper's distinctive title words so
     retrieval locks onto the source. Two ways a query "points at" a paper:
 
-      1. an alias phrase (all its tokens present in the query) — for papers whose
-         common name isn't their title (e.g. "original transformer" ->
+      1. an alias phrase (occurring as a contiguous phrase in the query) — for
+         papers whose common name isn't their title (e.g. "original transformer" ->
          "Attention Is All You Need"); aliases maps {phrase: arxiv_id}.
       2. otherwise, the paper whose title shares the most DISTINCTIVE tokens with
          the query — distinctive = appearing in at most ``max_df`` titles, so a
@@ -205,10 +214,10 @@ def anchor_query_to_title(query, titles, aliases=None, max_df=2):
     if not q_tokens:
         return query
 
-    # 1. alias phrases (curated name != title cases)
+    # 1. alias phrases (curated name != title cases), matched as contiguous phrases
+    q_norm = " ".join(tokenize(query))
     for phrase, arxiv_id in (aliases or {}).items():
-        ptoks = [t for t in tokenize(phrase) if t not in _TITLE_STOP]
-        if ptoks and all(t in q_tokens for t in ptoks) and arxiv_id in titles:
+        if arxiv_id in titles and _alias_in(phrase, q_norm):
             return _prepend_title(titles[arxiv_id], query, q_tokens)
 
     # 2. distinctive title-token overlap
@@ -249,17 +258,13 @@ def detect_named_papers(question, names):
 
     Deterministic counterpart to the LLM grader for one high-value judgment: did
     the question name a paper that retrieval failed to surface? A name matches when
-    every (non-stopword) token of the name phrase is present in the question — so
-    "bert" flags BERT but not RoBERTa, and "masked autoencoder" (not the lone word
-    "masked") is what flags MAE. Registry-curated to keep this precise.
+    its phrase occurs CONTIGUOUSLY in the question — so "bert" flags BERT but not
+    RoBERTa, "masked autoencoder" (not the lone word "masked") flags MAE, and
+    "original transformer" does not fire on "Swin Transformer ... the original ViT".
+    Registry-curated to keep this precise.
     """
-    q_tokens = {t for t in tokenize(question) if t not in _TITLE_STOP}
-    named: set[str] = set()
-    for phrase, arxiv_id in dict(names).items():
-        ptoks = [t for t in tokenize(phrase) if t not in _TITLE_STOP]
-        if ptoks and all(t in q_tokens for t in ptoks):
-            named.add(arxiv_id)
-    return named
+    q_norm = " ".join(tokenize(question))
+    return {arxiv_id for phrase, arxiv_id in dict(names).items() if _alias_in(phrase, q_norm)}
 
 
 def build_retriever(qdrant_config=None, retrieve_config=None, embed_config=None) -> HybridRetriever:

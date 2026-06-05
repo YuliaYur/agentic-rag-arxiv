@@ -278,3 +278,14 @@ def test_detect_multiword_alias_for_name_not_in_title():
         "How does ViT relate to the original Transformer's token embeddings?", _NAMES
     )
     assert named == {"2010.11929", "1706.03762"}
+
+
+def test_detect_alias_requires_contiguous_phrase():
+    # "Swin Transformer ... the original ViT": both "original" and "transformer"
+    # appear, but NOT as the phrase "original transformer" -- it must not mis-fire
+    # the Transformer paper (the q-0026 false positive).
+    named = detect_named_papers(
+        "How does Swin Transformer's hierarchy differ from the original ViT?", _NAMES
+    )
+    assert "1706.03762" not in named
+    assert named == {"2010.11929"}  # only ViT (Swin isn't in this mini-registry)
