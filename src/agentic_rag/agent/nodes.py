@@ -114,6 +114,7 @@ class AgentNodes:
             GRADE_SYSTEM,
             build_grade_prompt(state["original_question"], state["chunks"]),
             GradeResult,
+            role="grade",
         )
         sufficient = grade.sufficient
         sub_queries = grade.sub_queries
@@ -195,7 +196,9 @@ class AgentNodes:
         if is_revision:
             user += revision_note(critic)
 
-        draft: CitedAnswer = self._llm.structured(SYSTEM_PROMPT, user, CitedAnswer)
+        draft: CitedAnswer = self._llm.structured(
+            SYSTEM_PROMPT, user, CitedAnswer, role="synthesis"
+        )
         validated = validate_cited_answer(state["original_question"], draft, state["chunks"])
         entry = {
             "node": "generate",
@@ -221,6 +224,7 @@ class AgentNodes:
             CRITIC_SYSTEM,
             build_critic_prompt(state["original_question"], state["validated"], state["chunks"]),
             CriticResult,
+            role="critic",
         )
         # Keep-best: rank this draft and adopt it only if it STRICTLY beats the best
         # so far (ties keep the earlier draft). This makes revisions pure upside —

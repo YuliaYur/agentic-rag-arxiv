@@ -67,6 +67,7 @@ class NoOpTracer:
         input: Any = None,
         output: Any = None,
         usage: dict | None = None,
+        metadata: dict | None = None,
         start_time: Any = None,
         end_time: Any = None,
     ) -> None:
@@ -141,6 +142,7 @@ class LangfuseTracer:
         input: Any = None,
         output: Any = None,
         usage: dict | None = None,
+        metadata: dict | None = None,
         start_time: Any = None,
         end_time: Any = None,
     ) -> None:
@@ -150,7 +152,12 @@ class LangfuseTracer:
 
         def make():
             gen = parent.generation(
-                name=name, model=model, input=input, usage=usage, start_time=start_time
+                name=name,
+                model=model,
+                input=input,
+                usage=usage,
+                metadata=metadata,
+                start_time=start_time,
             )
             gen.end(output=output, end_time=end_time)
 

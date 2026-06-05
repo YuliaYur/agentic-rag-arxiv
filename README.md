@@ -157,6 +157,38 @@ Tracing is a thin facade (`agentic_rag.observability`): a `NoOpTracer` when off,
 `LangfuseTracer` when on, selected from env — so the default path imports nothing
 from Langfuse.
 
+## LLM routing & caching
+
+All LLM calls go through **LiteLLM** (one chokepoint, `agentic_rag.llm`), which buys
+three things behind the same `structured()` contract — rationale in
+[`DECISIONS.md`](DECISIONS.md) (ADR-0015):
+
+- **Per-role model routing.** The agent's `grade` and `cite_critic` nodes are bounded
+  classification/extraction tasks that run *repeatedly* in the loops — cheap-model
+  work; the final `synthesis` is the one user-facing artifact worth a stronger model.
+  `LLMConfig` maps role → model so you spend where it moves the metric. Default is
+  `gpt-4o-mini` for every role (so eval thresholds/CI cost are undisturbed); routing
+  is opt-in via env (`LLM_MODEL_SYNTHESIS`, …) or the `LLMConfig.routed()` preset.
+  Because LiteLLM is provider-agnostic, pointing a role at Claude is a model-string
+  change, not a code change.
+- **Semantic cache (opt-in, Redis).** With `LLM_CACHE_ENABLED=true` (+ `docker compose
+  up -d redis`), a query whose prompt is ≥ the similarity threshold (0.95 cosine) to a
+  cached one is served from Redis — **no provider call, ~0 cost, ~10× faster.** See
+  the trade-offs (staleness, false hits) in ADR-0015 before turning it on in anger.
+- **Cost + latency capture.** Each call's real LiteLLM cost + latency + cache-hit is
+  metered and attached to the Langfuse generation; `run_agent` rolls up
+  `cost_usd` / `llm_calls` / `cache_hits` / latency per query (and `agent_ask` prints
+  them). Langfuse aggregates p50/p95 across runs.
+
+```bash
+docker compose up -d redis                       # backend for the semantic cache
+python scripts/bench_routing_cache.py            # before/after: cost + p50/p95 + hit-rate
+```
+
+The benchmark contrasts a naive **uniform-strong** config (one big model everywhere)
+with **routed** (strong synthesis + cheap grade/critic) and **routed + cache**, and
+prints a cost/latency table.
+
 ## Retrieval
 
 Hybrid retrieval combines dense vector search (bge embeddings in Qdrant) with

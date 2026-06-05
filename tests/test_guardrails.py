@@ -160,7 +160,7 @@ class RecordingLLM:
         self.grade, self.answer, self.critic = grade, answer, critic
         self.prompts: list[str] = []
 
-    def structured(self, system, user, schema):
+    def structured(self, system, user, schema, role=None):
         self.prompts.append(user)
         return {"GradeResult": self.grade, "CitedAnswer": self.answer, "CriticResult": self.critic}[
             schema.__name__
