@@ -48,12 +48,13 @@ def create_app(service: AgentService | None = None) -> FastAPI:
         if getattr(app.state, "service", None) is None:
             try:
                 # Load .env so `uvicorn agentic_rag.api.app:app` finds the API key etc.
-                # (real env wins — override=False).
+                # override=True (matching the CLIs): the project's .env is the source of
+                # truth — a stale OPENAI_API_KEY already in the shell must NOT shadow it.
                 from dotenv import load_dotenv
 
                 from agentic_rag.ingest.config import REPO_ROOT
 
-                load_dotenv(REPO_ROOT / ".env", override=False)
+                load_dotenv(REPO_ROOT / ".env", override=True)
                 app.state.service = build_service()
             except Exception as exc:  # don't crash the server — /health reports it
                 app.state.service = None
