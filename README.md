@@ -13,10 +13,10 @@
 </p>
 
 <p align="center">
-  <video src="https://github.com/YuliaYur/agentic-rag-arxiv/raw/main/docs/demo.mp4" controls muted width="820"></video>
+  <video src="https://github.com/user-attachments/assets/ab645b42-6774-429e-8f71-6d39b812bf44" controls muted width="820"></video>
 </p>
 <p align="center">
-  <a href="docs/demo.mp4">Watch the demo</a> · <a href="SOURCES.md">Corpus</a> · <a href="DECISIONS.md">Design log (ADRs)</a>
+  <a href="SOURCES.md">Corpus</a> · <a href="DECISIONS.md">Design log (ADRs)</a>
 </p>
 
 ---
