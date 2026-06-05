@@ -20,6 +20,17 @@ services:
       - ./data/qdrant:/qdrant/storage
     restart: unless-stopped
 
+  # Backend for the LiteLLM semantic cache. redis-stack-server bundles RediSearch,
+  # which LiteLLM's `redis-semantic` cache needs for vector similarity search.
+  redis:
+    image: redis/redis-stack-server:7.4.0-v0
+    container_name: agentic-rag-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    restart: unless-stopped
+
   langfuse-db:
     image: postgres:16
     container_name: agentic-rag-langfuse-db

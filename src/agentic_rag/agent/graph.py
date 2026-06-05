@@ -118,8 +118,15 @@ def run_agent(app, question: str, config: AgentConfig | None = None) -> dict:
     """
     # recursion_limit caps total super-steps as a backstop; our own loop caps
     # stop things well before this.
+    from agentic_rag.llm.metering import meter, summarize
+
     with get_tracer().trace("agent-run", input=question) as root:
-        final = app.invoke(initial_state(question, config), {"recursion_limit": 50})
+        # Meter every LLM call in this run -> cost-per-query + latency for the trace.
+        with meter() as records:
+            final = app.invoke(initial_state(question, config), {"recursion_limit": 50})
+        stats = summarize(records)
+        final["metering"] = stats  # exposed to the CLI / harness
+
         decision = final.get("guardrail") or {}
         answer = final.get("answer")
         citations = [c.citation() for c in answer.citations] if answer else []
@@ -133,6 +140,10 @@ def run_agent(app, question: str, config: AgentConfig | None = None) -> dict:
             metadata={
                 "retrieval_rounds": final.get("retrieval_round"),
                 "revision_rounds": final.get("revision_round"),
+                "cost_usd": round(stats["cost_usd"], 6),
+                "llm_calls": stats["n_calls"],
+                "cache_hits": stats["cache_hits"],
+                "llm_latency_ms": round(stats["latency_ms_total"], 1),
             },
         )
         return final

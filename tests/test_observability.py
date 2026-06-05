@@ -122,7 +122,7 @@ class FakeRetriever:
 
 
 class FakeLLM:
-    def structured(self, system, user, schema):
+    def structured(self, system, user, schema, role=None):
         name = schema.__name__
         if name == "GradeResult":
             return GradeResult(sufficient=True, reasoning="r", refined_query="q")

@@ -33,7 +33,7 @@ class FakeLLM:
         }
         self.calls: list[str] = []
 
-    def structured(self, system, user, schema):
+    def structured(self, system, user, schema, role=None):
         name = schema.__name__
         self.calls.append(name)
         items = self.q[name]

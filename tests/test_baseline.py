@@ -22,7 +22,7 @@ class FakeLLM:
         self._response = response
         self.called = False
 
-    def structured(self, system, user, schema):
+    def structured(self, system, user, schema, role=None):
         self.called = True
         self.system, self.user = system, user
         return self._response

@@ -757,3 +757,87 @@ triage over all 30 questions, `scripts/check_registry_coverage.py`, caught
 "original transformer" mis-firing on q-0026's "Swin *Transformer* … the *original*
 ViT" — it would have force-fetched the irrelevant Transformer paper). Diagnostics:
 `scripts/trace_coverage.py` (with `--sub`) and `scripts/check_registry_coverage.py`.
+
+
+## ADR-0015 — Route LLM calls through LiteLLM: per-role routing, semantic cache, cost/latency
+
+**Status:** Accepted (2026-06-05)
+
+**Context.** Every LLM call already funnelled through one method,
+`LLMClient.structured()`, whose docstring anticipated "swapping to LiteLLM later …
+changing only this file." Three things motivated doing it: (1) the agent makes
+several *kinds* of call per query — context-sufficiency **grading**, the **citation
+critic**, and the final **synthesis** — that don't all need the same model;
+(2) repeated/similar questions re-pay for identical work; (3) we had no first-class
+cost-per-query or latency signal. LiteLLM gives provider-agnostic calls, per-call
+cost accounting, and pluggable caching behind the same `structured()` contract.
+
+**Decision.**
+- **Route through LiteLLM.** `structured(system, user, schema, role=None)` calls
+  `litellm.completion(..., response_format=schema)` and validates the JSON into the
+  same typed object (structured-output contract unchanged; `LLMRefusal` kept). Model
+  strings are LiteLLM-style, so switching a role to Claude/another provider is a
+  config change, not a code change.
+- **Per-role routing.** `LLMConfig` carries a role to model map; the three node call
+  sites pass `role="grade" | "critic" | "synthesis"`. *Reasoning:* grading ("is the
+  context enough?") and the critic ("is each claim supported?") are bounded
+  classification/extraction tasks a small model does well **and they run repeatedly**
+  (the re-retrieve/revise loops); the final synthesis is the single user-facing
+  artifact where a stronger model pays back. Routing concentrates spend where it
+  moves the metric. **Default stays `gpt-4o-mini` for every role** (so the eval
+  thresholds + CI cost are undisturbed); routing is opt-in and shown by the harness.
+- **Semantic cache (opt-in, Redis).** `configure_cache` installs a LiteLLM
+  `redis-semantic` cache (RediSearch via `redis-stack-server` in compose; embeddings
+  via a cheap OpenAI model). A query whose prompt is at/above `similarity_threshold`
+  (0.95 cosine) to a cached one is served from Redis — **no provider call, ~0 cost,
+  ~0 latency.** Off by default.
+- **Cost + latency capture.** Each call records `(model, cost, latency, cached,
+  tokens)` to a `contextvar` metering scope (`llm/metering.py`); LiteLLM's real
+  per-call cost is attached to the traced generation (so Langfuse cost reflects
+  routing and is **0 on a cache hit**). `run_agent` meters the whole run and writes
+  `cost_usd` / `llm_calls` / `cache_hits` / `llm_latency_ms` onto the root trace
+  (Langfuse aggregates p50/p95 across traces); the numbers are also returned in state
+  and printed by `agent_ask`.
+
+**Consequences — before/after** (`scripts/bench_routing_cache.py`, agent over a
+small query set):
+
+| Config | Queries | Total cost | $/query | p50 latency | p95 latency | Cache hit-rate |
+|---|---|---|---|---|---|---|
+| A uniform-strong (gpt-4o, no cache) | 3 | $0.0738 | $0.0246 | 22.84s | 28.98s | 0% |
+| B routed (gpt-4o synth + mini grade/critic) | 3 | $0.0213 | **$0.0071 (-71%)** | 24.33s | 28.66s | 0% |
+| C routed + cache (warm) | 3 | $0.0000 | **$0.0000 (-100%)** | 16.68s | 17.14s | 100% |
+
+- **Routing (B vs A): -71% cost.** Most calls per query are grade/critic/re-retrieve
+  loops; routing drops those to `gpt-4o-mini` and keeps only the single synthesis on
+  `gpt-4o`. Latency is ~unchanged (the gpt-4o synthesis call dominates either way) —
+  routing is a *cost* lever, not a latency one.
+- **Cache (C, warm): -100% LLM cost, 100% hit-rate.** A repeated structured call goes
+  3.5 s -> 0.34 s, $0.000012 -> $0 at the call level. End-to-end query latency only
+  drops to ~16.7 s, not to zero, because **caching skips LLM calls but not the agent's
+  retrieval/rerank** (cross-encoder on CPU + the deep decomposition retrieval + the
+  per-call cache-embedding lookup) — an honest reminder that the cache attacks the
+  *LLM* portion of latency, and the cross-encoder is the next latency lever.
+
+**Semantic-caching trade-offs (when it helps, when it can be stale/wrong).**
+*Helps:* repeated or near-duplicate questions, retries, FAQ-style traffic, eval
+re-runs, multiple users asking the same thing — instant and free, and it smooths p95
+(a hit skips the slow path). *Can return a stale or wrong answer when:*
+- **Staleness** — the cache keys on the *query*, not the *corpus*. If the index is
+  rebuilt (re-ingest, new papers, changed chunking) a cached answer is now stale.
+  Mitigation: a TTL, and bust/namespace the cache on re-ingest.
+- **False semantic hit** — two questions close in embedding space can have *different*
+  correct answers ("BERT base vs large" vs "BERT vs RoBERTa"). Too low a threshold
+  returns the wrong cached answer; too high and almost nothing hits. We default to a
+  strict 0.95 and treat it as a tuning knob.
+- **Hidden context** — if the answer depends on something *not in the query text*
+  (user, time, permissions, the specific retrieved docs), a query-text cache ignores
+  it. Our answer depends on retrieval, so caching at the *call* level (the prompt
+  includes the chunks) is safer than caching at the *question* level.
+- **Frozen quality** — a cached entry doesn't reflect a later prompt/model
+  improvement until it expires.
+- **Overhead on misses** — every *unique* query pays an extra embedding + vector
+  search for a lookup that misses. Semantic caching wins on workloads with real
+  repetition, not on all-unique traffic.
+Net: keep it opt-in, threshold strict, TTL'd, invalidated on ingest, and bypassed
+where freshness is critical; monitor the hit-rate so it earns its overhead.

@@ -1,15 +1,18 @@
-"""Thin wrapper around the LLM provider.
+"""LLM client — all calls route through LiteLLM.
 
-The rest of the app depends only on ``LLMClient.structured(...)``, never on the
-OpenAI SDK directly. That isolation is deliberate: swapping to **LiteLLM** later
-(for routing/caching/fallbacks across providers) means changing only this file —
-LiteLLM mirrors the OpenAI chat-completions API, including `response_format` for
-structured outputs.
+The rest of the app depends only on ``LLMClient.structured(...)``. Routing through
+LiteLLM (instead of the OpenAI SDK directly) buys three things with no change to
+callers: **per-role model routing** (a cheap model for grade/critic, a stronger one
+for synthesis — see ``LLMConfig``), an optional **semantic cache** (``llm/cache.py``),
+and **provider-agnostic** calls (swap to Claude etc. by changing a model string).
+
+Each call records cost + latency + cache-hit to the metering scope
+(``llm/metering.py``) and emits a traced generation (``observability``), so
+cost-per-query and p50/p95 latency are captured wherever the call happens.
 """
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from typing import TypeVar
 
@@ -25,84 +28,113 @@ class LLMError(RuntimeError):
 
 
 class LLMRefusal(LLMError):
-    """The model refused to answer (OpenAI structured-output refusal)."""
+    """The model refused to answer (structured-output refusal)."""
 
 
 class LLMClient:
     def __init__(self, config: LLMConfig | None = None) -> None:
         self.config = config or LLMConfig()
-        # Imported lazily so importing the package doesn't require the SDK or a key.
-        from openai import OpenAI
 
-        api_key = self.config.api_key or os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise LLMError("OPENAI_API_KEY is not set (put it in .env or the environment).")
-        self._client = OpenAI(api_key=api_key)
+    def structured(self, system: str, user: str, schema: type[T], role: str | None = None) -> T:
+        """Return a validated ``schema`` instance via LiteLLM structured outputs.
 
-    def structured(self, system: str, user: str, schema: type[T]) -> T:
-        """Return a validated instance of `schema` (OpenAI Structured Outputs).
-
-        Using the schema as `response_format` makes the provider return JSON that
-        conforms to the Pydantic model — the parsing/validation happens at the API
-        layer, so we get a typed object back, not a string to hand-parse.
+        ``role`` ("grade" | "critic" | "synthesis" | None) selects the model through
+        ``LLMConfig.resolve`` — that's the routing knob. The provider returns JSON
+        conforming to ``schema``; we validate it into a typed object.
         """
+        import litellm
+
+        model = self.config.resolve(role)
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ]
-        # `chat.completions.parse` is the structured-output helper (older SDKs
-        # expose it under `.beta`); support both.
-        parse = getattr(self._client.chat.completions, "parse", None)
-        if parse is None:
-            parse = self._client.beta.chat.completions.parse
+        kwargs: dict = {}
+        if self.config.api_key:
+            kwargs["api_key"] = self.config.api_key
 
-        # Bracket the call so the traced generation gets the real latency (we record
-        # it after the call returns, so without these timestamps it would read ~0ms).
+        # Bracket the call so the traced generation + metering get real latency.
         start = datetime.now(UTC)
-        completion = parse(
-            model=self.config.model,
+        completion = litellm.completion(
+            model=model,
             messages=messages,
             response_format=schema,
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
+            caching=litellm.cache is not None,  # honor the global semantic cache if installed
+            **kwargs,
         )
         end = datetime.now(UTC)
+
         message = completion.choices[0].message
         if getattr(message, "refusal", None):
             raise LLMRefusal(message.refusal)
-        if message.parsed is None:
-            raise LLMError("model returned no parsed structured output")
+        content = message.content
+        if not content:
+            raise LLMError("model returned no content")
+        try:
+            parsed = schema.model_validate_json(content)
+        except Exception as exc:  # malformed JSON despite structured outputs
+            raise LLMError(f"could not parse structured output: {exc}") from exc
 
-        # Record the call for tracing: token usage lets Langfuse compute cost from
-        # its model price list. No-op (and no import cost) when tracing is disabled.
-        self._trace_generation(schema.__name__, messages, message.parsed, completion, start, end)
-        return message.parsed
+        self._record(schema.__name__, role, model, messages, parsed, completion, start, end)
+        return parsed
 
-    def _trace_generation(
-        self, name: str, messages: list, parsed: T, completion, start, end
-    ) -> None:
-        from agentic_rag.observability import get_tracer
+    def _record(self, name, role, model, messages, parsed, completion, start, end) -> None:
+        """Record cost/latency/cache to the metering scope + emit a traced generation."""
+        import litellm
+
+        hidden = getattr(completion, "_hidden_params", {}) or {}
+        cached = bool(hidden.get("cache_hit"))
+        cost = (
+            0.0 if cached else float(hidden.get("response_cost") or _safe_cost(litellm, completion))
+        )
+        latency_ms = (end - start).total_seconds() * 1000.0
 
         usage = getattr(completion, "usage", None)
+        in_tok = int(getattr(usage, "prompt_tokens", 0) or 0)
+        out_tok = int(getattr(usage, "completion_tokens", 0) or 0)
+
+        from .metering import CallRecord, record_call
+
+        record_call(
+            CallRecord(
+                role=role,
+                model=model,
+                cost_usd=cost,
+                latency_ms=latency_ms,
+                cached=cached,
+                input_tokens=in_tok,
+                output_tokens=out_tok,
+            )
+        )
+
+        # Trace the generation. Token usage lets Langfuse cross-check; we attach the
+        # *actual* LiteLLM cost + cache flag as metadata (0 cost on a cache hit).
+        from agentic_rag.observability import get_tracer
+
         usage_details = (
-            {
-                "input": usage.prompt_tokens,
-                "output": usage.completion_tokens,
-                "total": usage.total_tokens,
-                "unit": "TOKENS",
-            }
+            {"input": in_tok, "output": out_tok, "total": in_tok + out_tok, "unit": "TOKENS"}
             if usage is not None
             else None
         )
         get_tracer().generation(
             name=name,
-            model=self.config.model,
+            model=model,
             input=messages,
             output=_repair_mojibake(parsed.model_dump()),
             usage=usage_details,
+            metadata={"cost_usd": round(cost, 6), "cached": cached, "role": role},
             start_time=start,
             end_time=end,
         )
+
+
+def _safe_cost(litellm, completion) -> float:
+    try:
+        return float(litellm.completion_cost(completion) or 0.0)
+    except Exception:  # cost calc is best-effort — never break a call over it
+        return 0.0
 
 
 # Markers of UTF-8 text that was misdecoded as cp1251/latin-1 (e.g. "§" -> "В§").

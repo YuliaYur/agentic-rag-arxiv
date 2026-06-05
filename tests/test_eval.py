@@ -75,7 +75,7 @@ class FakeLLM:
         self._responses = responses
         self.calls = []
 
-    def structured(self, system, user, schema):
+    def structured(self, system, user, schema, role=None):
         self.calls.append(schema.__name__)
         return schema(**self._responses[schema.__name__])
 

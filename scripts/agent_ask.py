@@ -98,6 +98,10 @@ def main(argv: list[str] | None = None) -> int:
     from agentic_rag.agent.config import AgentConfig
     from agentic_rag.agent.graph import build_agent, run_agent
     from agentic_rag.guardrails import Guardrails, GuardrailsConfig
+    from agentic_rag.llm.cache import CacheConfig, configure_cache
+
+    # Install the semantic cache if LLM_CACHE_ENABLED (no-op + safe if off/unreachable).
+    cache_on = configure_cache(CacheConfig.from_env())
 
     cfg = AgentConfig(
         k=args.k,
@@ -125,6 +129,14 @@ def main(argv: list[str] | None = None) -> int:
         print("\nCitations:")
         for c in ans.citations:
             print(f"  {c.citation()}")
+    m = final.get("metering") or {}
+    if m:
+        print(
+            f"\n[cost=${m.get('cost_usd', 0.0):.5f}  llm_calls={m.get('n_calls', 0)}  "
+            f"cache_hits={m.get('cache_hits', 0)}{' (cache on)' if cache_on else ''}  "
+            f"llm_latency={m.get('latency_ms_total', 0.0) / 1000:.2f}s "
+            f"(p50={m.get('p50_ms', 0.0):.0f}ms p95={m.get('p95_ms', 0.0):.0f}ms)]"
+        )
     print(
         f"\n[guardrail={decision.get('action', '?')} ({decision.get('reason', '?')})  "
         f"confidence={decision.get('confidence', 0.0):.2f}  "
